@@ -1,0 +1,25 @@
+# FastAPI
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+pydantic==2.5.2
+pydantic-settings==2.1.0
+
+# PDF extraction
+PyMuPDF==1.23.7
+
+# NumPy (pinned <2.0 for opencv-python-headless 4.8.x compatibility)
+numpy>=1.21,<2.0
+
+# OCR
+pytesseract==0.3.10
+Pillow==10.1.0
+opencv-python-headless==4.8.1.78
+
+# Field extraction
+python-stdnum==1.20
+dateparser==1.2.0
+rapidfuzz==3.5.2
+
+# HTTP client (health checks)
+httpx==0.25.2

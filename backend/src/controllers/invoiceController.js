@@ -1,0 +1,78 @@
+const invoiceService = require('../services/invoiceService');
+
+async function upload(req, res, next) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: true, message: 'No se ha proporcionado ningún archivo' });
+    }
+
+    const result = await invoiceService.upload(req.file, req.user.id, req.ip);
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getAll(req, res, next) {
+  try {
+    const { estado, tipo, page, limit } = req.query;
+    const result = await invoiceService.getAll({
+      estado,
+      tipo,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getById(req, res, next) {
+  try {
+    const factura = await invoiceService.getById(parseInt(req.params.id, 10));
+    res.json(factura);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getDocumentFile(req, res, next) {
+  try {
+    const document = await invoiceService.getDocumentFile(parseInt(req.params.documentId, 10));
+    res.type(document.tipo_mime);
+    res.sendFile(document.ruta_storage);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function validate(req, res, next) {
+  try {
+    const factura = await invoiceService.validate(parseInt(req.params.id, 10), req.user.id, req.ip);
+    res.json(factura);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function reject(req, res, next) {
+  try {
+    const { motivo } = req.body;
+    const factura = await invoiceService.reject(parseInt(req.params.id, 10), req.user.id, req.ip, motivo);
+    res.json(factura);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function update(req, res, next) {
+  try {
+    const factura = await invoiceService.updateData(parseInt(req.params.id, 10), req.body, req.user.id, req.ip);
+    res.json(factura);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { upload, getAll, getById, getDocumentFile, validate, reject, update };
