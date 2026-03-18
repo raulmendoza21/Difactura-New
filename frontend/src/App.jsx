@@ -17,7 +17,7 @@ function AppLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Overlay móvil */}
+      {/* Overlay movil */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 lg:hidden"
@@ -56,6 +56,14 @@ export default function App() {
         element={
           <ProtectedRoute roles={['ADMIN', 'CONTABILIDAD']}>
             <AppLayout><UploadInvoice /></AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/review-queue"
+        element={
+          <ProtectedRoute roles={['ADMIN', 'CONTABILIDAD', 'REVISOR']}>
+            <Navigate to="/invoices" replace />
           </ProtectedRoute>
         }
       />

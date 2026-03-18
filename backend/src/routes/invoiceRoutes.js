@@ -7,7 +7,16 @@ const { validateInvoiceUpdate } = require('../validators/invoiceValidator');
 
 router.use(authMiddleware);
 
-router.post('/upload', roleMiddleware('ADMIN', 'CONTABILIDAD'), upload.single('file'), invoiceController.upload);
+router.post(
+  '/upload',
+  roleMiddleware('ADMIN', 'CONTABILIDAD'),
+  upload.fields([
+    { name: 'files', maxCount: 25 },
+    { name: 'camera_files', maxCount: 25 },
+    { name: 'file', maxCount: 1 },
+  ]),
+  invoiceController.upload
+);
 router.get('/', invoiceController.getAll);
 router.get('/documents/:documentId/file', invoiceController.getDocumentFile);
 router.get('/:id', invoiceController.getById);

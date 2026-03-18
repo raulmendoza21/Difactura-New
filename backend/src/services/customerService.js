@@ -1,38 +1,57 @@
 const customerRepo = require('../repositories/customerRepository');
 const { normalizeName } = require('../utils/helpers');
+const { ValidationError } = require('../utils/errors');
 
-async function findAll() {
-  return customerRepo.findAll();
+function ensureAdvisoryId(asesoriaId) {
+  if (!asesoriaId) {
+    throw new ValidationError('El contexto de asesoria es obligatorio');
+  }
 }
 
-async function findById(id) {
-  return customerRepo.findById(id);
+async function findAll(asesoriaId) {
+  ensureAdvisoryId(asesoriaId);
+  return customerRepo.findAll(asesoriaId);
 }
 
-async function findOrCreateByCif(nombre, cif) {
+async function findById(id, asesoriaId) {
+  ensureAdvisoryId(asesoriaId);
+  return customerRepo.findById(id, asesoriaId);
+}
+
+async function findOrCreateByCif(asesoriaId, nombre, cif) {
+  ensureAdvisoryId(asesoriaId);
+
   if (cif) {
-    const existing = await customerRepo.findByCif(cif);
-    if (existing) return existing;
+    const existingByCif = await customerRepo.findByCif(cif, asesoriaId);
+    if (existingByCif) {
+      return existingByCif;
+    }
   }
 
-  const nombreNorm = normalizeName(nombre);
-  if (nombreNorm) {
-    const existing = await customerRepo.findByNormalizedName(nombreNorm);
-    if (existing) return existing;
+  const nombreNormalizado = normalizeName(nombre);
+  if (nombreNormalizado) {
+    const existingByName = await customerRepo.findByNormalizedName(nombreNormalizado, asesoriaId);
+    if (existingByName) {
+      return existingByName;
+    }
   }
 
   return customerRepo.create({
+    asesoria_id: asesoriaId,
     nombre,
-    nombre_normalizado: nombreNorm,
+    nombre_normalizado: nombreNormalizado,
     cif: cif || null,
   });
 }
 
-async function update(id, data) {
+async function update(id, asesoriaId, data) {
+  ensureAdvisoryId(asesoriaId);
+
   if (data.nombre) {
     data.nombre_normalizado = normalizeName(data.nombre);
   }
-  return customerRepo.update(id, data);
+
+  return customerRepo.update(id, asesoriaId, data);
 }
 
 module.exports = { findAll, findById, findOrCreateByCif, update };

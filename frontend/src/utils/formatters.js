@@ -1,5 +1,5 @@
 export function formatCurrency(amount) {
-  if (amount == null) return '—';
+  if (amount == null) return '-';
   return new Intl.NumberFormat('es-ES', {
     style: 'currency',
     currency: 'EUR',
@@ -7,7 +7,7 @@ export function formatCurrency(amount) {
 }
 
 export function formatDate(dateStr) {
-  if (!dateStr) return '—';
+  if (!dateStr) return '-';
   const date = new Date(dateStr);
   return new Intl.DateTimeFormat('es-ES', {
     day: '2-digit',
@@ -17,7 +17,7 @@ export function formatDate(dateStr) {
 }
 
 export function formatDateTime(dateStr) {
-  if (!dateStr) return '—';
+  if (!dateStr) return '-';
   const date = new Date(dateStr);
   return new Intl.DateTimeFormat('es-ES', {
     day: '2-digit',
@@ -29,11 +29,12 @@ export function formatDateTime(dateStr) {
 }
 
 export function formatPercentage(value) {
-  if (value == null) return '—';
-  return `${Math.round(value)}%`;
+  if (value == null) return '-';
+  const normalized = value <= 1 ? value * 100 : value;
+  return `${Math.round(normalized)}%`;
 }
 
 export function truncateText(text, maxLength = 40) {
-  if (!text) return '—';
-  return text.length > maxLength ? text.slice(0, maxLength) + '…' : text;
+  if (!text) return '-';
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }

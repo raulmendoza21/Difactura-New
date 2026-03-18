@@ -144,9 +144,32 @@ async function findDocumentById(documentId) {
 
 async function createDocument(data) {
   const result = await db.query(
-    `INSERT INTO documentos_subidos (factura_id, nombre_archivo, ruta_storage, tipo_mime, tamano_bytes, hash_archivo)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [data.factura_id, data.nombre_archivo, data.ruta_storage, data.tipo_mime, data.tamano_bytes, data.hash_archivo]
+    `INSERT INTO documentos_subidos (
+        factura_id,
+        usuario_subida_id,
+        batch_id,
+        canal_entrada,
+        nombre_archivo,
+        storage_key,
+        ruta_storage,
+        tipo_mime,
+        tamano_bytes,
+        hash_archivo
+      )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     RETURNING *`,
+    [
+      data.factura_id,
+      data.usuario_subida_id,
+      data.batch_id,
+      data.canal_entrada || 'web',
+      data.nombre_archivo,
+      data.storage_key,
+      data.ruta_storage,
+      data.tipo_mime,
+      data.tamano_bytes,
+      data.hash_archivo,
+    ]
   );
   return result.rows[0];
 }

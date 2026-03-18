@@ -13,7 +13,7 @@ export const INVOICE_STATE_LABELS = {
   SUBIDA: 'Subida',
   EN_PROCESO: 'En proceso',
   PROCESADA_IA: 'Procesada por IA',
-  PENDIENTE_REVISION: 'Pendiente de revisión',
+  PENDIENTE_REVISION: 'Pendiente de revision',
   VALIDADA: 'Validada',
   SINCRONIZADA: 'Sincronizada',
   ERROR_PROCESAMIENTO: 'Error de procesamiento',
@@ -46,6 +46,8 @@ export const INVOICE_TYPES = {
 export const INVOICE_TYPE_LABELS = {
   COMPRA: 'Compra',
   VENTA: 'Venta',
+  compra: 'Compra',
+  venta: 'Venta',
 };
 
 export const CONFIDENCE_THRESHOLDS = {
@@ -53,5 +55,5 @@ export const CONFIDENCE_THRESHOLDS = {
   MEDIUM: 70,
 };
 
-export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export const ALLOWED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff'];

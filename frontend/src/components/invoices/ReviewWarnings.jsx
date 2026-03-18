@@ -105,8 +105,8 @@ export default function ReviewWarnings({ invoice }) {
       <StatusPanel
         tone="success"
         eyebrow="Revision automatica"
-        title="Sin alertas automaticas"
-        description="La factura no presenta incoherencias obvias. Aun asi, puedes revisar y editar cualquier dato antes de validarla."
+        title="Sin incidencias detectadas"
+        description="No se han detectado incoherencias claras. Aun asi, puedes revisar cualquier campo antes de validar."
         compact
       />
     );
@@ -119,11 +119,11 @@ export default function ReviewWarnings({ invoice }) {
   return (
     <StatusPanel
       tone={tone}
-      eyebrow="Revision recomendada"
-      title="Campos que conviene comprobar"
-      description="Estas alertas se generan automaticamente para ayudarte a detectar problemas antes de validar."
+      eyebrow="Comprobaciones sugeridas"
+      title="Revisa estos campos antes de validar"
+      description="Estas alertas se generan automaticamente para ayudarte a detectar posibles errores."
       items={warnings.map((warning) => warning.text)}
-      footer="Si ves algo raro, puedes corregirlo desde Editar datos."
+      footer="Si hace falta, puedes corregirlos desde Editar datos."
       compact
     />
   );

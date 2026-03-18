@@ -1,23 +1,30 @@
 import { useAuth } from '../../hooks/useAuth';
 
 export default function Navbar({ onToggleSidebar }) {
-  const { user, logout } = useAuth();
+  const { user, advisory, selectedCompany, logout } = useAuth();
 
   return (
     <header className="sticky top-0 z-30 h-16 bg-white/80 backdrop-blur-md border-b border-slate-200/60 flex items-center px-4 sm:px-6 lg:px-8">
-      {/* Hamburguesa móvil */}
       <button
         onClick={onToggleSidebar}
         className="lg:hidden p-2 -ml-1 mr-3 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"/>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
 
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-slate-800 truncate">
+          {advisory?.nombre || 'Asesoria'}
+        </p>
+        <p className="text-xs text-slate-500 truncate">
+          {selectedCompany?.nombre || 'Sin empresa cliente seleccionada'}
+        </p>
+      </div>
+
       <div className="flex-1" />
 
-      {/* User section */}
       <div className="flex items-center gap-3">
         <div className="hidden sm:block text-right">
           <p className="text-sm font-medium text-slate-700">{user?.nombre}</p>
@@ -29,10 +36,10 @@ export default function Navbar({ onToggleSidebar }) {
         <button
           onClick={logout}
           className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200"
-          title="Cerrar sesión"
+          title="Cerrar sesion"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
         </button>
       </div>

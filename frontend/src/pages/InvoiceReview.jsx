@@ -306,7 +306,7 @@ export default function InvoiceReview() {
       <div className="text-center py-20">
         <p className="text-red-500 mb-4">{error}</p>
         <button onClick={() => navigate('/invoices')} className="btn-secondary">
-          Volver al historial
+          Volver a la bandeja documental
         </button>
       </div>
     );
@@ -323,7 +323,7 @@ export default function InvoiceReview() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
             </svg>
-            Historial
+            Bandeja documental
           </button>
           <h1 className="text-2xl font-bold text-slate-800">Revision de factura</h1>
         </div>
@@ -362,8 +362,8 @@ export default function InvoiceReview() {
       {feedback && (
         <StatusPanel
           tone="success"
-          eyebrow="Accion completada"
-          title="Operacion realizada correctamente"
+          eyebrow="Operacion completada"
+          title="Cambios aplicados correctamente"
           description={feedback}
           compact
         />
@@ -372,8 +372,8 @@ export default function InvoiceReview() {
       {error && (
         <StatusPanel
           tone="error"
-          eyebrow="Hay un problema"
-          title="No se pudo completar la accion"
+          eyebrow="Operacion no completada"
+          title="No se pudo aplicar el cambio"
           description={error}
           compact
         />
@@ -383,12 +383,12 @@ export default function InvoiceReview() {
         <div className="space-y-3">
           <StatusPanel
             tone="progress"
-            eyebrow="Procesamiento en curso"
-            title="La factura todavia se esta preparando"
-            description="Estamos procesando el documento para extraer sus datos. Esta vista se actualiza sola, no hace falta recargar la pagina."
+            eyebrow="Procesando"
+            title="Extrayendo informacion del documento"
+            description="La factura sigue en proceso. Esta pantalla se actualiza automaticamente."
             items={[
               ...getProcessingItems(invoice),
-              'Si el modelo local estaba en reposo, este paso puede tardar mas de lo habitual.',
+              'Si el modelo local estaba en reposo, el tiempo de respuesta puede aumentar.',
             ]}
             footer={`Ultima comprobacion automatica: ${refreshLabel}.`}
           />
@@ -410,9 +410,9 @@ export default function InvoiceReview() {
       {invoice?.estado === INVOICE_STATES.ERROR_PROCESAMIENTO && (
         <StatusPanel
           tone="error"
-          eyebrow="Procesamiento detenido"
-          title="La extraccion automatica no pudo completarse"
-          description="La factura ha quedado marcada con error de procesamiento."
+          eyebrow="Error de proceso"
+          title="No se pudo completar la extraccion"
+          description="La factura ha quedado marcada con error de procesamiento y requiere revision."
           items={[
             invoice?.job?.error_message || 'Revisa los logs del backend y del ai-service para ver el error exacto.',
             'Si el documento es valido, puedes volver a subirlo o revisar el entorno local.',
@@ -424,11 +424,11 @@ export default function InvoiceReview() {
       {isEditing && (
         <StatusPanel
           tone="warning"
-          eyebrow="Modo edicion"
-          title="Estas corrigiendo la informacion extraida"
-          description="Usa el documento original como referencia. Los cambios se guardan antes de validar y quedaran reflejados en la factura final."
+          eyebrow="Edicion manual"
+          title="Estas corrigiendo los datos extraidos"
+          description="Usa el documento original como referencia. Los cambios se guardaran antes de validar."
           items={[
-            'Revisa sobre todo numero de factura, fecha, proveedor, CIF e importes.',
+            'Revisa numero de factura, fecha, proveedor, CIF e importes.',
             'Si faltan lineas, puedes anadirlas manualmente.',
           ]}
           compact

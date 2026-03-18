@@ -1,11 +1,22 @@
 -- ============================================================
--- Difactura - Creación de Tablas
--- 9 tablas del sistema, ordenadas respetando dependencias FK
+-- Difactura - Creacion de tablas
+-- Esquema base para el MVP documental
 -- ============================================================
 
--- ─── 1. Usuarios ────────────────────────────────────────────────
+-- 1. Asesorias
+CREATE TABLE asesorias (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(255) NOT NULL,
+    estado VARCHAR(20) NOT NULL DEFAULT 'ACTIVA'
+        CHECK (estado IN ('ACTIVA', 'INACTIVA')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 2. Usuarios internos de asesoria
 CREATE TABLE usuarios (
     id SERIAL PRIMARY KEY,
+    asesoria_id INTEGER NOT NULL REFERENCES asesorias(id) ON DELETE RESTRICT,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     nombre VARCHAR(150) NOT NULL,
@@ -16,7 +27,7 @@ CREATE TABLE usuarios (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ─── 2. Proveedores ────────────────────────────────────────────
+-- 3. Proveedores
 CREATE TABLE proveedores (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(255) NOT NULL,
@@ -29,20 +40,23 @@ CREATE TABLE proveedores (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ─── 3. Clientes ───────────────────────────────────────────────
+-- 4. Empresas cliente de una asesoria
 CREATE TABLE clientes (
     id SERIAL PRIMARY KEY,
+    asesoria_id INTEGER NOT NULL REFERENCES asesorias(id) ON DELETE CASCADE,
     nombre VARCHAR(255) NOT NULL,
     nombre_normalizado VARCHAR(255),
-    cif VARCHAR(20) UNIQUE,
+    cif VARCHAR(20),
     direccion TEXT,
     email VARCHAR(255),
     telefono VARCHAR(30),
+    estado VARCHAR(20) NOT NULL DEFAULT 'ACTIVA'
+        CHECK (estado IN ('ACTIVA', 'INACTIVA')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ─── 4. Productos y Servicios ──────────────────────────────────
+-- 5. Productos y servicios
 CREATE TABLE productos_servicios (
     id SERIAL PRIMARY KEY,
     descripcion VARCHAR(500) NOT NULL,
@@ -53,7 +67,7 @@ CREATE TABLE productos_servicios (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ─── 5. Facturas ───────────────────────────────────────────────
+-- 6. Facturas
 CREATE TABLE facturas (
     id SERIAL PRIMARY KEY,
     numero_factura VARCHAR(100),
@@ -80,7 +94,7 @@ CREATE TABLE facturas (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ─── 6. Líneas de Factura ──────────────────────────────────────
+-- 7. Lineas de factura
 CREATE TABLE factura_lineas (
     id SERIAL PRIMARY KEY,
     factura_id INTEGER NOT NULL REFERENCES facturas(id) ON DELETE CASCADE,
@@ -92,11 +106,16 @@ CREATE TABLE factura_lineas (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ─── 7. Documentos Subidos ─────────────────────────────────────
+-- 8. Documentos subidos
 CREATE TABLE documentos_subidos (
     id SERIAL PRIMARY KEY,
     factura_id INTEGER REFERENCES facturas(id) ON DELETE CASCADE,
+    usuario_subida_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    batch_id VARCHAR(64),
+    canal_entrada VARCHAR(30) NOT NULL DEFAULT 'web'
+        CHECK (canal_entrada IN ('web', 'mobile_camera', 'mobile_gallery')),
     nombre_archivo VARCHAR(500) NOT NULL,
+    storage_key VARCHAR(1000),
     ruta_storage VARCHAR(1000) NOT NULL,
     tipo_mime VARCHAR(100) NOT NULL,
     tamano_bytes BIGINT,
@@ -104,7 +123,7 @@ CREATE TABLE documentos_subidos (
     fecha_subida TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ─── 8. Processing Jobs ────────────────────────────────────────
+-- 9. Jobs de procesamiento
 CREATE TABLE processing_jobs (
     id SERIAL PRIMARY KEY,
     factura_id INTEGER NOT NULL REFERENCES facturas(id) ON DELETE CASCADE,
@@ -118,7 +137,7 @@ CREATE TABLE processing_jobs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ─── 9. Auditoría de Procesos ──────────────────────────────────
+-- 10. Auditoria
 CREATE TABLE auditoria_procesos (
     id SERIAL PRIMARY KEY,
     usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
@@ -129,7 +148,7 @@ CREATE TABLE auditoria_procesos (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ─── Función para auto-actualizar updated_at ────────────────────
+-- Funcion para autoactualizar updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -138,7 +157,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Triggers para updated_at
+CREATE TRIGGER trg_asesorias_updated_at
+    BEFORE UPDATE ON asesorias
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER trg_usuarios_updated_at
     BEFORE UPDATE ON usuarios
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

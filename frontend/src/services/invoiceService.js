@@ -1,13 +1,22 @@
 import api from './api';
 
-export async function uploadInvoice(file) {
+export async function uploadInvoices(files, { companyId, channel = 'web' } = {}) {
   const formData = new FormData();
-  formData.append('file', file);
+  files.forEach((file) => formData.append('files', file));
+  if (companyId) {
+    formData.append('company_id', String(companyId));
+  }
+  formData.append('channel', channel);
+
   const { data } = await api.post('/invoices/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120000,
   });
   return data;
+}
+
+export async function uploadInvoice(file, options = {}) {
+  return uploadInvoices([file], options);
 }
 
 export async function getInvoices(params = {}) {

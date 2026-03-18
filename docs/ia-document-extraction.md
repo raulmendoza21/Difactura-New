@@ -1,93 +1,73 @@
 # Extraccion documental con IA
 
-## Objetivo
+## Estado de este documento
 
-Añadir un flujo `PDF/imagen -> JSON` en `ai-service` sin eliminar el pipeline actual.
+Este archivo queda como referencia tecnica del enfoque explorado en la etapa anterior del proyecto.
 
-## Enfoque
+La vision actual del producto y la arquitectura objetivo deben tomarse de:
 
-El servicio de IA ahora puede trabajar en modo hibrido:
+- `docs/estructura-proyecto.md`
+- `docs/architecture.md`
+- `docs/database-schema.md`
+- `docs/deployment.md`
 
-- `heuristic`: OCR + reglas + clasificacion actual
-- `openai_compatible`: intenta extraer con un modelo visual/documental y, si falla, vuelve al modo heuristico
-- `ollama`: usa un modelo de texto local para convertir OCR/texto extraido a JSON y, si falla, vuelve al modo heuristico
+---
 
-## Flujo
+## Que se exploro en la fase previa
 
-1. Se sube un PDF o imagen.
-2. `document_loader.py` obtiene:
-   - texto extraido
-   - numero de paginas
-   - imagenes de las paginas
-3. `document_intelligence.py`:
-   - usa el proveedor configurado
-   - fuerza salida JSON con un schema fijo
-   - mezcla la respuesta del modelo con el fallback heuristico
-4. El endpoint devuelve:
-   - campos de factura
-   - `provider`
-   - `method`
-   - `warnings`
+En la fase anterior se validaron estas ideas:
 
-## Variables de entorno
+- separar OCR y estructuracion
+- usar un servicio documental en Python
+- probar una capa de estructuracion con IA sobre texto extraido
+- mantener revision humana final
 
-```env
-DOC_AI_ENABLED=false
-DOC_AI_PROVIDER=heuristic
-DOC_AI_BASE_URL=http://ollama-service:11434
-DOC_AI_API_KEY=
-DOC_AI_MODEL=qwen2.5:3b
-DOC_AI_TIMEOUT_SECONDS=120
-DOC_AI_MAX_PAGES=4
-DOC_AI_KEEP_ALIVE=1h
-```
+La conclusion mas importante fue:
 
-## Integracion prevista
+- un modelo visual grande local no era realista para el hardware disponible
+- un flujo OCR/texto + modelo pequeno/local para estructurar si era viable como experimento
 
-La opcion `openai_compatible` esta pensada para servidores locales o internos que expongan una API compatible con `POST /chat/completions`, por ejemplo un servicio intermedio delante del modelo visual.
+---
 
-## Integracion local recomendada
+## Aprendizajes reutilizables
 
-El proyecto ya queda preparado para levantar dos tipos de proveedores locales con Docker Compose:
+Los aprendizajes que siguen siendo utiles para el rediseño son:
 
-- texto a JSON:
-  - servicio: `ollama-service`
-  - perfil: `doc-ai-text`
-  - modelo por defecto: `qwen2.5:3b`
+- OCR, interpretacion y logica contable deben desacoplarse
+- la salida del modelo debe convertirse a estructura controlada
+- siempre hacen falta normalizacion y validaciones posteriores
+- la confianza del modelo no sustituye la validacion humana
 
-- visual/documental:
-  - servicio: `llm-service`
-  - perfil: `doc-ai-vlm`
-  - runtime: `vllm/vllm-openai`
-  - modelo por defecto: `Qwen/Qwen2.5-VL-7B-Instruct`
+---
 
-Arranque:
+## Papel de la IA en la nueva etapa
 
-```bash
-docker compose --profile doc-ai-text up -d ollama-service ai-service backend
-```
+En la nueva vision del producto, la IA debe entenderse como una capacidad dentro del pipeline documental, no como el centro del sistema.
 
-Configuracion minima para activar el flujo:
+Su rol esperado es:
 
-```env
-DOC_AI_ENABLED=true
-DOC_AI_PROVIDER=ollama
-DOC_AI_BASE_URL=http://ollama-service:11434
-DOC_AI_MODEL=qwen2.5:3b
-```
+- ayudar a estructurar datos
+- sugerir clasificacion y contexto
+- apoyar la propuesta contable
 
-Notas:
+Pero nunca:
 
-- `ollama` usa `format` con schema JSON para mejorar la consistencia de la respuesta
-- `DOC_AI_KEEP_ALIVE=1h` reduce la probabilidad de que Ollama tenga que recargar el modelo entre facturas
-- `openai_compatible` sigue disponible para un VLM grande si algun dia lo quieres en otra maquina
-- la primera descarga del modelo ocupa varios GB
+- confirmar por si sola la contabilizacion final
+- escribir directamente asientos sin supervision humana
 
-## Siguiente paso recomendado
+---
 
-Conectar un proveedor real y probarlo con 10-20 facturas:
+## Decision vigente
 
-- `Qwen2.5-VL-7B-Instruct` como primera prueba
-- revisar JSON devuelto
-- ajustar prompt y normalizacion
-- medir latencia y consumo
+La arquitectura nueva no parte de "montar mas IA", sino de construir un flujo serio:
+
+1. recepcion
+2. almacenamiento
+3. cola de trabajos
+4. OCR/extraccion
+5. interpretacion asistida
+6. propuesta contable
+7. revision humana
+8. validacion final
+
+La IA queda subordinada a ese flujo.

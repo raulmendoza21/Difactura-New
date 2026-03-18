@@ -11,10 +11,18 @@ export function useInvoices(initialParams = {}) {
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
     setError(null);
+
     try {
       const data = await invoiceService.getInvoices(params);
-      setInvoices(data.facturas || []);
-      setPagination(data.pagination || { total: 0, page: 1, limit: 20 });
+      const items = data.data || data.facturas || [];
+      const nextPagination = data.pagination || {
+        total: data.total || 0,
+        page: data.page || params.page || 1,
+        limit: data.limit || params.limit || 20,
+      };
+
+      setInvoices(items);
+      setPagination(nextPagination);
     } catch (err) {
       setError(err.response?.data?.message || 'Error al cargar facturas');
     } finally {

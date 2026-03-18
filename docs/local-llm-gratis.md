@@ -1,82 +1,44 @@
-# Ejecutar un LLM local y gratis para estructurar texto
+# Uso de LLM local gratis
 
-## Objetivo
+## Estado de este documento
 
-Levantar el flujo `OCR/texto -> JSON` sin pagar APIs externas.
+Este documento ya no define la direccion del proyecto. Queda como nota tecnica de una exploracion previa para ejecutar inferencia local sin coste de API.
 
-## Como funciona
+La documentacion principal del nuevo enfoque esta en:
 
-- El OCR o extractor de texto obtiene el contenido de la factura
-- Un modelo de texto local recibe ese contenido
-- El modelo devuelve JSON estructurado
-- `ai-service` valida y completa campos faltantes con el fallback heuristico
-- No pagas inferencia a terceros
+- `docs/estructura-proyecto.md`
+- `docs/architecture.md`
+- `docs/deployment.md`
 
-## Que necesitas
+---
 
-- Docker Desktop funcionando
-- GPU NVIDIA opcional pero recomendable
-- Espacio en disco para descargar el modelo local
+## Que se valido
 
-## Configuracion
+En la etapa anterior se comprobo que era posible:
 
-1. Copia [/.env.example](/c:/Users/raule/Documents/DISOFT/.env.example) a `.env` en la raiz.
-2. Revisa estas variables:
+- usar un modelo local pequeno para estructurar texto OCR a JSON
+- integrar esa inferencia local con el servicio documental
+- mantener el coste de API en cero
 
-```env
-DOC_AI_ENABLED=true
-DOC_AI_PROVIDER=ollama
-DOC_AI_BASE_URL=http://ollama-service:11434
-DOC_AI_MODEL=qwen2.5:3b
-DOC_AI_TIMEOUT_SECONDS=600
-DOC_AI_KEEP_ALIVE=1h
-```
+---
 
-## Arranque del modelo
+## Que limite aparecio
 
-Primero levanta Ollama:
+El principal limite no fue de integracion, sino de operativa:
 
-```bash
-docker compose --profile doc-ai-text up -d ollama-service
-```
+- hardware local limitado
+- calentamiento del modelo
+- latencia variable
+- mantenimiento de GPU y entorno de inferencia
 
-Luego descarga el modelo una vez:
+---
 
-```bash
-docker compose exec ollama-service ollama pull qwen2.5:3b
-```
+## Como debe leerse ahora
 
-Y después arranca el servicio de IA y backend:
+Este documento debe entenderse solo como:
 
-```bash
-docker compose --profile doc-ai-text up -d ai-service backend
-```
+- referencia de un spike tecnico previo
+- prueba de viabilidad de inferencia local
+- antecedente util para futuras decisiones
 
-## Comprobaciones
-
-Modelo local:
-
-```bash
-docker compose exec ollama-service ollama list
-```
-
-Servicio de IA:
-
-```bash
-docker compose --profile doc-ai-text logs -f ai-service
-```
-
-## Importante
-
-- Esta configuracion esta pensada para local y sin coste de API
-- El coste real es solo tu hardware y electricidad
-- En una GTX 1650, este enfoque es bastante mas realista que un modelo visual grande
-- `DOC_AI_KEEP_ALIVE=1h` ayuda a evitar arranques en frio si subes varias facturas seguidas
-- Si `qwen2.5:3b` va lento, puedes probar `qwen2.5:1.5b`
-
-## Siguiente paso
-
-Cuando el modelo arranque, ya puedes enviar facturas al endpoint actual:
-
-- `POST /ai/process`
-- `POST /ai/extract`
+No debe tomarse como la arquitectura objetivo del nuevo producto.

@@ -1,33 +1,33 @@
 const STYLES = {
   info: {
-    container: 'border-blue-200 bg-blue-50/80 text-blue-900',
-    badge: 'bg-blue-100 text-blue-700',
-    icon: 'text-blue-600 bg-blue-100',
+    container: 'border-slate-200 bg-white text-slate-900 shadow-sm',
+    badge: 'bg-slate-100 text-slate-600',
+    icon: 'border border-blue-100 bg-blue-50 text-blue-600',
     itemDot: 'bg-blue-500',
   },
   warning: {
-    container: 'border-amber-200 bg-amber-50/90 text-amber-950',
+    container: 'border-amber-200 bg-amber-50/65 text-slate-900 shadow-sm',
     badge: 'bg-amber-100 text-amber-700',
-    icon: 'text-amber-600 bg-amber-100',
+    icon: 'border border-amber-100 bg-amber-50 text-amber-600',
     itemDot: 'bg-amber-500',
   },
   success: {
-    container: 'border-emerald-200 bg-emerald-50/90 text-emerald-950',
+    container: 'border-emerald-200 bg-emerald-50/65 text-slate-900 shadow-sm',
     badge: 'bg-emerald-100 text-emerald-700',
-    icon: 'text-emerald-600 bg-emerald-100',
+    icon: 'border border-emerald-100 bg-emerald-50 text-emerald-600',
     itemDot: 'bg-emerald-500',
   },
   error: {
-    container: 'border-red-200 bg-red-50/90 text-red-950',
+    container: 'border-red-200 bg-red-50/65 text-slate-900 shadow-sm',
     badge: 'bg-red-100 text-red-700',
-    icon: 'text-red-600 bg-red-100',
+    icon: 'border border-red-100 bg-red-50 text-red-600',
     itemDot: 'bg-red-500',
   },
   progress: {
-    container: 'border-indigo-200 bg-indigo-50/90 text-indigo-950',
-    badge: 'bg-indigo-100 text-indigo-700',
-    icon: 'text-indigo-600 bg-indigo-100',
-    itemDot: 'bg-indigo-500',
+    container: 'border-blue-200 bg-blue-50/65 text-slate-900 shadow-sm',
+    badge: 'bg-blue-100 text-blue-700',
+    icon: 'border border-blue-100 bg-blue-50 text-blue-600',
+    itemDot: 'bg-blue-500',
   },
 };
 
@@ -96,18 +96,18 @@ export default function StatusPanel({
             </span>
           )}
           {title && <h3 className="mt-2 text-base font-bold">{title}</h3>}
-          {description && <p className="mt-1.5 text-sm leading-6 opacity-90">{description}</p>}
+          {description && <p className="mt-1.5 text-sm leading-6 text-slate-600">{description}</p>}
           {items.length > 0 && (
             <ul className="mt-3 space-y-2">
               {items.map((item, index) => (
-                <li key={`${item}-${index}`} className="flex gap-2.5 text-sm leading-6">
+                <li key={`${item}-${index}`} className="flex gap-2.5 text-sm leading-6 text-slate-700">
                   <span className={`w-2 h-2 rounded-full mt-2 ${styles.itemDot}`} />
                   <span>{item}</span>
                 </li>
               ))}
             </ul>
           )}
-          {footer && <p className="mt-3 text-xs font-medium opacity-75">{footer}</p>}
+          {footer && <p className="mt-3 text-xs font-medium text-slate-500">{footer}</p>}
         </div>
       </div>
     </div>

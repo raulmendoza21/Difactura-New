@@ -2,12 +2,28 @@ const invoiceService = require('../services/invoiceService');
 
 async function upload(req, res, next) {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: true, message: 'No se ha proporcionado ningún archivo' });
+    const files = [
+      ...(req.files?.files || []),
+      ...(req.files?.camera_files || []),
+      ...(req.files?.file || []),
+    ];
+
+    if (files.length === 0) {
+      return res.status(400).json({ error: true, message: 'No se ha proporcionado ningun archivo' });
     }
 
-    const result = await invoiceService.upload(req.file, req.user.id, req.ip);
-    res.status(201).json(result);
+    const companyId = parseInt(req.body.company_id || req.headers['x-company-id'], 10);
+    const channel = req.body.channel || 'web';
+
+    const result = await invoiceService.uploadBatch(files, {
+      userId: req.user.id,
+      asesoriaId: req.user.asesoria_id,
+      companyId,
+      channel,
+      ip: req.ip,
+    });
+
+    res.status(result.summary.failed > 0 ? 207 : 201).json(result);
   } catch (err) {
     next(err);
   }
@@ -68,7 +84,13 @@ async function reject(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    const factura = await invoiceService.updateData(parseInt(req.params.id, 10), req.body, req.user.id, req.ip);
+    const factura = await invoiceService.updateData(
+      parseInt(req.params.id, 10),
+      req.body,
+      req.user.id,
+      req.user.asesoria_id,
+      req.ip
+    );
     res.json(factura);
   } catch (err) {
     next(err);
