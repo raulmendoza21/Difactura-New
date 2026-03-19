@@ -31,10 +31,21 @@ async function upload(req, res, next) {
 
 async function getAll(req, res, next) {
   try {
-    const { estado, tipo, page, limit } = req.query;
+    const { estado, tipo, page, limit, company_id, channel, batch_id, search, sort_by, sort_dir } = req.query;
+    const companyHeaderId = parseInt(req.headers['x-company-id'], 10);
+    const parsedCompanyId = company_id
+      ? parseInt(company_id, 10)
+      : (Number.isNaN(companyHeaderId) ? undefined : companyHeaderId);
     const result = await invoiceService.getAll({
+      asesoriaId: req.user.asesoria_id,
       estado,
       tipo,
+      companyId: parsedCompanyId,
+      channel,
+      batchId: batch_id,
+      search,
+      sortBy: sort_by,
+      sortDir: sort_dir,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
     });
@@ -97,4 +108,13 @@ async function update(req, res, next) {
   }
 }
 
-module.exports = { upload, getAll, getById, getDocumentFile, validate, reject, update };
+async function reprocess(req, res, next) {
+  try {
+    const factura = await invoiceService.reprocess(parseInt(req.params.id, 10), req.user.id, req.ip);
+    res.json(factura);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { upload, getAll, getById, getDocumentFile, validate, reject, update, reprocess };

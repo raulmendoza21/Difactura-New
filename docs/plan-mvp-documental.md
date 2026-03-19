@@ -340,3 +340,11 @@ Cuando eso ocurra, la siguiente fase sera:
 - asiento borrador
 - persistencia final de contabilizacion
 - integraciones externas
+
+Antes de empezar esa fase, debe quedar fijado el contrato de datos entre extraccion documental y contabilidad:
+
+- ver `docs/contrato-datos-documentales-y-contables.md`
+
+Documento de trabajo para el siguiente ciclo de mejora gratuita de extraccion:
+
+- ver `docs/proximo-plan-extraccion-gratuita.md`

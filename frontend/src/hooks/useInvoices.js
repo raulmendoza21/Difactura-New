@@ -34,9 +34,9 @@ export function useInvoices(initialParams = {}) {
     fetchInvoices();
   }, [fetchInvoices]);
 
-  const updateParams = (newParams) => {
+  const updateParams = useCallback((newParams) => {
     setParams((prev) => ({ ...prev, ...newParams }));
-  };
+  }, []);
 
   return { invoices, pagination, loading, error, refetch: fetchInvoices, updateParams };
 }

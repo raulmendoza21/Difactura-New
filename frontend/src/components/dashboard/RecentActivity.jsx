@@ -1,5 +1,6 @@
 import LoadingSpinner from '../common/LoadingSpinner';
 import { formatDateTime } from '../../utils/formatters';
+import InfoPopover from '../common/InfoPopover';
 
 const ACTION_LABELS = {
   SUBIDA: 'Subida',
@@ -47,7 +48,19 @@ export default function RecentActivity({ activities = [], loading = false }) {
     <div className="card p-6">
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
-          <h3 className="text-base font-semibold text-slate-800">Actividad reciente</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-800">Actividad reciente</h3>
+            <InfoPopover
+              title="Actividad reciente"
+              description="Muestra los ultimos movimientos registrados sobre facturas y acciones humanas."
+              items={[
+                'Sirve para seguir validaciones, rechazos, subidas y actualizaciones.',
+                'Se actualiza segun el contexto activo de la asesoria.',
+              ]}
+              widthClass="w-72"
+              align="left"
+            />
+          </div>
           <p className="text-xs text-slate-400 mt-1">Ultimos movimientos registrados en la asesoria.</p>
         </div>
         <span className="text-xs font-medium text-slate-400">{activities.length} eventos</span>

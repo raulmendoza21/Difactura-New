@@ -83,6 +83,8 @@ async def process_invoice(
         return {
             "success": result["success"],
             **data.model_dump(),
+            "normalized_document": result["normalized_document"].model_dump(),
+            "coverage": result["coverage"].model_dump(),
             "raw_text": raw_text,
             "method": result["method"],
             "provider": result["provider"],

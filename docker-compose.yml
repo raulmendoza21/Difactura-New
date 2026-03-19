@@ -81,6 +81,7 @@ services:
       - "8000:8000"
     volumes:
       - ./ai-service/app:/app/app
+      - ./ai-service/tests:/app/tests
       - ./storage:/app/storage
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/ai/health || exit 1"]

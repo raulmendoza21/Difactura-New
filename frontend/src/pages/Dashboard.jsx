@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import InfoPopover from '../components/common/InfoPopover';
 import StatusPanel from '../components/common/StatusPanel';
-import CompanySelector from '../components/companies/CompanySelector';
 import Charts from '../components/dashboard/Charts';
 import RecentActivity from '../components/dashboard/RecentActivity';
 import StatsCard from '../components/dashboard/StatsCard';
@@ -18,7 +18,7 @@ function buildStatsMap(items = []) {
 }
 
 export default function Dashboard() {
-  const { advisory, selectedCompany, setSelectedCompany, clearSelectedCompany } = useAuth();
+  const { advisory, selectedCompany, clearSelectedCompany } = useAuth();
   const [companies, setCompanies] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -44,6 +44,16 @@ export default function Dashboard() {
       }
     };
 
+    loadCompanies();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
     const loadStats = async () => {
       try {
         const nextStats = await getDashboardStats();
@@ -59,7 +69,7 @@ export default function Dashboard() {
       }
     };
 
-    loadCompanies();
+    setStatsLoading(true);
     loadStats();
 
     const interval = setInterval(loadStats, 15000);
@@ -68,7 +78,7 @@ export default function Dashboard() {
       active = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [selectedCompany?.id]);
 
   useEffect(() => {
     if (loading || companies.length === 0 || !selectedCompany) {
@@ -85,20 +95,6 @@ export default function Dashboard() {
     companies.find((company) => company.id === selectedCompany?.id) || selectedCompany;
 
   const statsByState = useMemo(() => buildStatsMap(stats?.por_estado), [stats]);
-
-  const handleCompanyChange = (event) => {
-    const companyId = Number(event.target.value);
-
-    if (!companyId) {
-      clearSelectedCompany();
-      return;
-    }
-
-    const company = companies.find((item) => item.id === companyId);
-    if (company) {
-      setSelectedCompany(company);
-    }
-  };
 
   if (loading) {
     return <LoadingSpinner text="Cargando centro operativo..." />;
@@ -119,8 +115,8 @@ export default function Dashboard() {
               Centro operativo documental
             </h1>
             <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">
-              Desde aqui preparas el contexto de trabajo, controlas la carga documental de la asesoria
-              y saltas rapido a la subida o a la bandeja de revision.
+              Controla la carga documental, revisa el contexto activo y entra rapido en la subida o
+              en la bandeja de trabajo.
             </p>
           </div>
 
@@ -137,32 +133,74 @@ export default function Dashboard() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatsCard
-          title="Empresas cliente"
-          value={companies.length}
-          subtitle="Empresas dadas de alta para esta asesoria"
+          title={selectedCompanyDetails ? 'Docs empresa activa' : 'Empresas cliente'}
+          value={selectedCompanyDetails ? stats?.total ?? 0 : companies.length}
+          subtitle={
+            selectedCompanyDetails
+              ? 'Documentos visibles para la empresa seleccionada'
+              : 'Empresas dadas de alta para esta asesoria'
+          }
           color="blue"
           icon="M17 20h5V4H2v16h5m10 0v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6m10 0H7"
+          infoTitle={selectedCompanyDetails ? 'Documentos empresa activa' : 'Empresas cliente'}
+          infoDescription={
+            selectedCompanyDetails
+              ? 'Cuenta el volumen documental visible para la empresa que has seleccionado arriba.'
+              : 'Cuenta las empresas cliente dadas de alta en la asesoria.'
+          }
+          infoItems={
+            selectedCompanyDetails
+              ? [
+                  'Este numero cambia automaticamente cuando cambias de empresa activa.',
+                  'Incluye documentos pendientes, en proceso, con error y validados.',
+                ]
+              : ['Si eliges una empresa en la barra superior, el centro operativo se acota a ella.']
+          }
         />
         <StatsCard
           title="Pendientes"
           value={stats?.pendientes_revision ?? 0}
-          subtitle="Documentos listos para revision humana"
+          subtitle={
+            selectedCompanyDetails
+              ? 'Pendientes de la empresa activa'
+              : 'Documentos listos para revision humana'
+          }
           color="amber"
           icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+          infoTitle="Pendientes"
+          infoDescription="Documentos ya procesados que esperan una revision humana antes de confirmarse."
+          infoItems={[
+            'Son el bloque principal de trabajo para la asesoria.',
+            'No quedan validados hasta que alguien revise y confirme la factura.',
+          ]}
         />
         <StatsCard
           title="Validadas"
           value={stats?.validadas ?? 0}
-          subtitle="Facturas ya confirmadas"
+          subtitle={
+            selectedCompanyDetails
+              ? 'Validadas para la empresa activa'
+              : 'Facturas ya confirmadas'
+          }
           color="emerald"
           icon="M5 13l4 4L19 7"
+          infoTitle="Validadas"
+          infoDescription="Facturas ya revisadas y confirmadas por una persona del equipo."
+          infoItems={['Este bloque ayuda a ver el avance real del trabajo cerrado.']}
         />
         <StatsCard
           title="Con error"
           value={stats?.errores ?? 0}
-          subtitle="Necesitan reproceso o revision manual"
+          subtitle={
+            selectedCompanyDetails
+              ? 'Errores de la empresa activa'
+              : 'Necesitan reproceso o revision manual'
+          }
           color="red"
           icon="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          infoTitle="Con error"
+          infoDescription="Documentos que no han completado correctamente el flujo automatico."
+          infoItems={['Conviene revisarlos o lanzarlos de nuevo a la cola.']}
         />
       </div>
 
@@ -180,37 +218,41 @@ export default function Dashboard() {
         <StatusPanel
           tone="warning"
           eyebrow="Seleccion requerida"
-          title="Elige una empresa cliente para empezar"
-          description="La subida documental y parte del flujo operativo usan la empresa activa como contexto."
+          title="Elige una empresa cliente desde la barra superior"
+          description="La empresa activa acota la bandeja, las metricas y el contexto de subida."
           items={[
-            'Selecciona la empresa con la que vas a trabajar ahora.',
-            'Ese contexto se reutiliza en la subida y en la revision documental.',
+            'Si seleccionas una empresa, todo el trabajo operativo se filtra por ella.',
+            'Si no seleccionas ninguna, veras el agregado global de la asesoria.',
           ]}
           compact
         />
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <CompanySelector
-          companies={companies}
-          value={selectedCompany?.id || ''}
-          onChange={handleCompanyChange}
-          loading={loading}
-        />
-
+      <div className="grid gap-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-            Contexto activo
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              Contexto activo
+            </p>
+            <InfoPopover
+              title="Contexto activo"
+              description="Resume desde que asesoria y empresa estas operando ahora mismo."
+              items={[
+                'La empresa activa filtra bandeja, metricas y nuevas subidas.',
+                'Si no hay empresa activa, veras la vista global de la asesoria.',
+              ]}
+              align="left"
+            />
+          </div>
 
-          <div className="mt-4 grid gap-4">
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
             <div className="rounded-2xl bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Asesoria</p>
               <p className="mt-2 text-lg font-semibold text-slate-900">
                 {advisory?.nombre || 'Sin asesoria'}
               </p>
               <p className="mt-1 text-sm text-slate-500">
-                Tu trabajo y la bandeja documental se ejecutan dentro de este contexto.
+                Todo el trabajo se ejecuta dentro de este contexto.
               </p>
             </div>
 
@@ -223,25 +265,36 @@ export default function Dashboard() {
                     {selectedCompanyDetails.cif || 'Sin CIF registrado'}
                   </p>
                   <p className="mt-3 text-sm text-slate-500">
-                    Los nuevos documentos que subas se asociaran por defecto a esta empresa cliente.
+                    La bandeja y las metricas se estan filtrando por esta empresa.
                   </p>
                 </>
               ) : (
                 <>
-                  <p className="mt-2 text-lg font-semibold text-slate-900">Ninguna seleccionada</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-900">Vista global</p>
                   <p className="mt-3 text-sm text-slate-500">
-                    Deja una empresa seleccionada para trabajar mas rapido en la recepcion documental.
+                    Selecciona una empresa arriba para trabajar en modo acotado.
                   </p>
                 </>
               )}
             </div>
 
             <div className="rounded-2xl border border-slate-100 bg-white p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Siguiente accion recomendada</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Siguiente accion</p>
+                <InfoPopover
+                  title="Siguiente accion"
+                  description="Orienta el siguiente paso recomendado en funcion del contexto que tengas activo."
+                  items={[
+                    'Lo habitual es alternar entre subir nuevos lotes y revisar la bandeja documental.',
+                  ]}
+                  align="left"
+                  widthClass="w-64"
+                />
+              </div>
               <p className="mt-2 text-sm text-slate-600">
                 {selectedCompanyDetails
-                  ? `Puedes subir un nuevo lote para ${selectedCompanyDetails.nombre} o revisar la bandeja documental.`
-                  : 'Selecciona primero una empresa cliente y luego empieza a subir documentos.'}
+                  ? `Puedes subir un nuevo lote para ${selectedCompanyDetails.nombre} o revisar su bandeja documental.`
+                  : 'Selecciona una empresa o continua revisando el global de la asesoria.'}
               </p>
             </div>
           </div>
@@ -249,39 +302,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-              Acciones rapidas
-            </p>
-            <div className="mt-4 grid gap-3">
-              <Link
-                to="/invoices/upload"
-                className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50"
-              >
-                <div>
-                  <p className="font-semibold text-slate-900">Recibir un nuevo lote</p>
-                  <p className="mt-1 text-xs text-slate-500">Sube PDFs, imagenes o fotos desde movil.</p>
-                </div>
-                <span className="text-blue-600">Abrir</span>
-              </Link>
-
-              <Link
-                to="/invoices"
-                className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50"
-              >
-                <div>
-                  <p className="font-semibold text-slate-900">Revisar bandeja documental</p>
-                  <p className="mt-1 text-xs text-slate-500">Controla subidas, pendientes, errores y validadas.</p>
-                </div>
-                <span className="text-blue-600">Abrir</span>
-              </Link>
-            </div>
-          </div>
-
-          <Charts statsByState={statsByState} />
-        </div>
-
+        <Charts statsByState={statsByState} />
         <RecentActivity activities={stats?.actividad_reciente || []} loading={statsLoading} />
       </div>
     </div>

@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import StatusPanel from '../components/common/StatusPanel';
+import CompanySelector from '../components/companies/CompanySelector';
 import InvoiceUploader from '../components/invoices/InvoiceUploader';
 import { useAuth } from '../hooks/useAuth';
+import { getCompanies } from '../services/companyService';
 
 const CAPTURE_OPTIONS = [
   'PDF',
@@ -12,7 +15,47 @@ const CAPTURE_OPTIONS = [
 
 export default function UploadInvoice() {
   const navigate = useNavigate();
-  const { selectedCompany } = useAuth();
+  const { selectedCompany, setSelectedCompany, clearSelectedCompany } = useAuth();
+  const [companies, setCompanies] = useState([]);
+  const [companiesLoading, setCompaniesLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadCompanies = async () => {
+      try {
+        const items = await getCompanies();
+        if (!active) return;
+        setCompanies(items);
+      } catch {
+        if (!active) return;
+        setCompanies([]);
+      } finally {
+        if (!active) return;
+        setCompaniesLoading(false);
+      }
+    };
+
+    loadCompanies();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleCompanyChange = (event) => {
+    const companyId = Number(event.target.value);
+
+    if (!companyId) {
+      clearSelectedCompany();
+      return;
+    }
+
+    const company = companies.find((item) => item.id === companyId);
+    if (company) {
+      setSelectedCompany(company);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -45,8 +88,8 @@ export default function UploadInvoice() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[380px]">
-            <Link to="/invoices" className="btn-secondary justify-center text-center">
+          <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[360px]">
+            <Link to="/invoices" className="btn-primary justify-center text-center">
               Abrir bandeja documental
             </Link>
             <Link to="/dashboard" className="btn-secondary justify-center text-center">
@@ -56,75 +99,36 @@ export default function UploadInvoice() {
         </div>
       </section>
 
-      {!selectedCompany ? (
-        <>
-          <StatusPanel
-            tone="warning"
-            eyebrow="Empresa requerida"
-            title="Selecciona una empresa cliente antes de subir"
-            description="Necesitamos una empresa activa para asociar correctamente el lote documental."
-            items={[
-              'Ve al centro operativo y elige la empresa con la que vas a trabajar.',
-              'Despues vuelve a esta pantalla para registrar el lote.',
-            ]}
-            footer="Sin ese contexto no se puede registrar la subida."
-          />
-
-          <div className="flex justify-start">
-            <Link to="/dashboard" className="btn-secondary">
-              Ir al centro operativo
-            </Link>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                Empresa activa
-              </p>
-              <p className="mt-3 text-lg font-semibold text-slate-900">{selectedCompany.nombre}</p>
-              <p className="mt-1 text-sm text-slate-500">
-                {selectedCompany.cif || 'Sin CIF registrado'}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                Formatos admitidos
-              </p>
-              <p className="mt-3 text-lg font-semibold text-slate-900">PDF, JPG, PNG y TIFF</p>
-              <p className="mt-1 text-sm text-slate-500">
-                Hasta 10 MB por archivo y con soporte para lotes.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                Flujo de trabajo
-              </p>
-              <p className="mt-3 text-lg font-semibold text-slate-900">Subida, proceso y revision</p>
-              <p className="mt-1 text-sm text-slate-500">
-                El original se conserva y la bandeja documental refleja el estado del lote.
-              </p>
-            </div>
-          </div>
-
-          <InvoiceUploader
-            company={selectedCompany}
-            onUploaded={(result) => {
-              if (result?.summary?.accepted === 1) {
-                const firstAccepted = result.documents?.find((document) => document.status === 'queued');
-                if (firstAccepted?.factura?.id) {
-                  setTimeout(() => navigate(`/invoices/review/${firstAccepted.factura.id}`), 1200);
-                }
-              } else if (result?.summary?.accepted > 1) {
-                setTimeout(() => navigate('/invoices'), 1200);
-              }
-            }}
-          />
-        </>
+      {!selectedCompany && (
+        <StatusPanel
+          tone="warning"
+          eyebrow="Empresa requerida"
+          title="Selecciona una empresa cliente antes de procesar"
+          description="El lote documental se asociara a la empresa activa que elijas aqui o en la barra superior."
+          compact
+        />
       )}
+
+      <CompanySelector
+        companies={companies}
+        value={selectedCompany?.id || ''}
+        onChange={handleCompanyChange}
+        loading={companiesLoading}
+      />
+
+      <InvoiceUploader
+        company={selectedCompany}
+        onUploaded={(result) => {
+          if (result?.summary?.accepted === 1) {
+            const firstAccepted = result.documents?.find((document) => document.status === 'queued');
+            if (firstAccepted?.factura?.id) {
+              setTimeout(() => navigate(`/invoices/review/${firstAccepted.factura.id}`), 1200);
+            }
+          } else if (result?.summary?.accepted > 1) {
+            setTimeout(() => navigate('/invoices'), 1200);
+          }
+        }}
+      />
     </div>
   );
 }

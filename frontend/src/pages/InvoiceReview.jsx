@@ -6,7 +6,7 @@ import InvoiceDetailCard from '../components/invoices/InvoiceDetailCard';
 import InvoiceLineItems from '../components/invoices/InvoiceLineItems';
 import InvoicePreview from '../components/invoices/InvoicePreview';
 import ReviewWarnings from '../components/invoices/ReviewWarnings';
-import { getInvoiceById, rejectInvoice, updateInvoice, validateInvoice } from '../services/invoiceService';
+import { getInvoiceById, rejectInvoice, reprocessInvoice, updateInvoice, validateInvoice } from '../services/invoiceService';
 import { formatCurrency } from '../utils/formatters';
 import { INVOICE_STATES } from '../utils/constants';
 
@@ -14,6 +14,12 @@ const ACTIVE_PROCESSING_STATES = new Set([INVOICE_STATES.SUBIDA, INVOICE_STATES.
 const EDITABLE_STATES = new Set([
   INVOICE_STATES.PENDIENTE_REVISION,
   INVOICE_STATES.PROCESADA_IA,
+  INVOICE_STATES.RECHAZADA,
+]);
+const REPROCESSABLE_STATES = new Set([
+  INVOICE_STATES.PENDIENTE_REVISION,
+  INVOICE_STATES.PROCESADA_IA,
+  INVOICE_STATES.ERROR_PROCESAMIENTO,
   INVOICE_STATES.RECHAZADA,
 ]);
 
@@ -198,6 +204,7 @@ export default function InvoiceReview() {
 
   const canAct = [INVOICE_STATES.PENDIENTE_REVISION, INVOICE_STATES.PROCESADA_IA].includes(invoice?.estado);
   const canEdit = EDITABLE_STATES.has(invoice?.estado);
+  const canReprocess = REPROCESSABLE_STATES.has(invoice?.estado);
   const isProcessing = ACTIVE_PROCESSING_STATES.has(invoice?.estado);
   const refreshLabel = formatRefreshTime(lastRefreshAt);
 
@@ -297,6 +304,29 @@ export default function InvoiceReview() {
     await loadInvoiceRef.current(false);
   };
 
+  const handleReprocess = async () => {
+    setActionLoading('reprocess');
+    setFeedback('');
+
+    try {
+      const updated = await reprocessInvoice(id);
+      const nextInvoice = updated.factura || updated;
+      setInvoice(nextInvoice);
+      setDraft(createDraftFromInvoice(nextInvoice));
+      setIsEditing(false);
+      setShowReject(false);
+      setRejectMotivo('');
+      setError('');
+      setFeedback('La factura ha vuelto a la cola de procesamiento.');
+      setLastRefreshAt(new Date());
+      await loadInvoiceRef.current(false);
+    } catch (err) {
+      setError(err.response?.data?.message || 'No se pudo relanzar el procesamiento');
+    } finally {
+      setActionLoading('');
+    }
+  };
+
   if (loading) {
     return <LoadingSpinner text="Cargando factura..." />;
   }
@@ -332,6 +362,12 @@ export default function InvoiceReview() {
           {canEdit && !isEditing && (
             <button onClick={handleStartEdit} disabled={!!actionLoading} className="btn-secondary">
               Editar datos
+            </button>
+          )}
+
+          {canReprocess && !isEditing && (
+            <button onClick={handleReprocess} disabled={!!actionLoading} className="btn-secondary">
+              {actionLoading === 'reprocess' ? 'Relanzando...' : 'Reprocesar'}
             </button>
           )}
 
@@ -415,7 +451,7 @@ export default function InvoiceReview() {
           description="La factura ha quedado marcada con error de procesamiento y requiere revision."
           items={[
             invoice?.job?.error_message || 'Revisa los logs del backend y del ai-service para ver el error exacto.',
-            'Si el documento es valido, puedes volver a subirlo o revisar el entorno local.',
+            'Puedes relanzar el procesamiento desde esta misma pantalla cuando el entorno vuelva a estar disponible.',
           ]}
           footer="Mientras no se reprocesa, esta factura no tendra datos fiables para validar."
         />

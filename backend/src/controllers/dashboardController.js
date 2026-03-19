@@ -3,7 +3,11 @@ const auditService = require('../services/auditService');
 
 async function getStats(req, res, next) {
   try {
-    const estados = await invoiceService.getStats();
+    const companyId = parseInt(req.headers['x-company-id'], 10);
+    const estados = await invoiceService.getStats(
+      req.user.asesoria_id,
+      Number.isNaN(companyId) ? undefined : companyId
+    );
     const recentActivity = await auditService.getRecent(10);
 
     const totalFacturas = estados.reduce((sum, e) => sum + e.count, 0);

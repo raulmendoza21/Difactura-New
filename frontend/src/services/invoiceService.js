@@ -44,6 +44,11 @@ export async function rejectInvoice(id, motivo) {
   return data;
 }
 
+export async function reprocessInvoice(id) {
+  const { data } = await api.post(`/invoices/${id}/reprocess`);
+  return data;
+}
+
 export async function getDashboardStats() {
   const { data } = await api.get('/dashboard');
   return data;

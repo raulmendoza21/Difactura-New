@@ -1,6 +1,7 @@
 const app = require('./app');
 const fs = require('fs');
 const storageConfig = require('./config/storage');
+const processingWorkerService = require('./services/processingWorkerService');
 
 const PORT = process.env.PORT || 3000;
 
@@ -12,7 +13,35 @@ for (const dir of [storageConfig.uploadsDir, storageConfig.processedDir]) {
   }
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   console.log(`Difactura Backend corriendo en puerto ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/api/health`);
+
+  try {
+    await processingWorkerService.start();
+  } catch (error) {
+    console.error(`No se pudo iniciar el worker de procesamiento: ${error.message}`);
+  }
+});
+
+async function shutdown(signal) {
+  console.log(`${signal} recibido. Cerrando servicios...`);
+
+  try {
+    await processingWorkerService.stop();
+  } catch (error) {
+    console.error(`Error deteniendo worker: ${error.message}`);
+  }
+
+  server.close(() => {
+    process.exit(0);
+  });
+}
+
+process.on('SIGINT', () => {
+  shutdown('SIGINT');
+});
+
+process.on('SIGTERM', () => {
+  shutdown('SIGTERM');
 });

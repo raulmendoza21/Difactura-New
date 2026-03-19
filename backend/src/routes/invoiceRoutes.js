@@ -21,6 +21,7 @@ router.get('/', invoiceController.getAll);
 router.get('/documents/:documentId/file', invoiceController.getDocumentFile);
 router.get('/:id', invoiceController.getById);
 router.put('/:id', roleMiddleware('ADMIN', 'CONTABILIDAD', 'REVISOR'), validateInvoiceUpdate, invoiceController.update);
+router.post('/:id/reprocess', roleMiddleware('ADMIN', 'CONTABILIDAD', 'REVISOR'), invoiceController.reprocess);
 router.post('/:id/validate', roleMiddleware('ADMIN', 'CONTABILIDAD', 'REVISOR'), invoiceController.validate);
 router.post('/:id/reject', roleMiddleware('ADMIN', 'CONTABILIDAD', 'REVISOR'), invoiceController.reject);
 

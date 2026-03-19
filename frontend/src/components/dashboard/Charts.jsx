@@ -1,4 +1,5 @@
 import { INVOICE_STATE_LABELS } from '../../utils/constants';
+import InfoPopover from '../common/InfoPopover';
 
 const BAR_COLORS = [
   'bg-blue-500',
@@ -34,7 +35,19 @@ export default function Charts({ statsByState = {} }) {
     <div className="card p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-base font-semibold text-slate-800">Estado de la bandeja</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-800">Estado de la bandeja</h3>
+            <InfoPopover
+              title="Estado de la bandeja"
+              description="Resume como se reparte el trabajo documental dentro del contexto activo."
+              items={[
+                'Los estados tecnicos ayudan a detectar cuellos de botella en la cola.',
+                'Pendientes y errores son los bloques que conviene atender primero.',
+              ]}
+              widthClass="w-72"
+              align="left"
+            />
+          </div>
           <p className="text-xs text-slate-400 mt-1">Distribucion actual de documentos por estado.</p>
         </div>
         <span className="text-sm text-slate-400">{total} total</span>

@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const invoiceRepo = require('../repositories/invoiceRepository');
-const aiClient = require('./aiClientService');
 const auditService = require('./auditService');
 const supplierService = require('./supplierService');
 const customerService = require('./customerService');
@@ -47,10 +46,6 @@ async function uploadSingle(file, {
     accion: 'SUBIDA',
     detalle: { archivo: file.originalname, tamano: file.size },
     ip,
-  });
-
-  processWithAI(factura.id, file.path, file.mimetype, job.id, companyId).catch((err) => {
-    console.error(`Error procesando factura ${factura.id}:`, err.message);
   });
 
   return {
@@ -125,53 +120,6 @@ async function uploadBatch(files, { userId, asesoriaId, companyId, channel, ip }
   };
 }
 
-async function processWithAI(facturaId, filePath, mimeType, jobId, companyId) {
-  try {
-    await invoiceRepo.update(facturaId, { estado: INVOICE_STATES.EN_PROCESO });
-    await invoiceRepo.updateJob(jobId, { estado: JOB_STATES.EN_PROCESO, started_at: new Date() });
-
-    const result = await aiClient.processInvoice(filePath, mimeType);
-
-    let proveedorId = null;
-    let clienteId = companyId;
-
-    if (result.proveedor || result.cif_proveedor) {
-      const proveedor = await supplierService.findOrCreateByCif(result.proveedor, result.cif_proveedor);
-      proveedorId = proveedor.id;
-    }
-
-    await invoiceRepo.update(facturaId, {
-      numero_factura: result.numero_factura || null,
-      tipo: result.tipo_factura || 'compra',
-      fecha: result.fecha || null,
-      proveedor_id: proveedorId,
-      cliente_id: clienteId,
-      base_imponible: result.base_imponible || null,
-      iva_porcentaje: result.iva_porcentaje || null,
-      iva_importe: result.iva || null,
-      total: result.total || null,
-      confianza_ia: result.confianza,
-      estado: INVOICE_STATES.PENDIENTE_REVISION,
-      fecha_procesado: new Date(),
-    });
-
-    if (result.lineas && result.lineas.length > 0) {
-      await invoiceRepo.deleteLines(facturaId);
-      await invoiceRepo.createLines(facturaId, result.lineas);
-    }
-
-    await invoiceRepo.updateJob(jobId, { estado: JOB_STATES.COMPLETADO, finished_at: new Date() });
-  } catch (err) {
-    await invoiceRepo.update(facturaId, { estado: INVOICE_STATES.ERROR_PROCESAMIENTO });
-    await invoiceRepo.updateJob(jobId, {
-      estado: JOB_STATES.ERROR,
-      finished_at: new Date(),
-      error_message: err.message,
-    });
-    throw err;
-  }
-}
-
 async function getAll(filters) {
   return invoiceRepo.findAll(filters);
 }
@@ -242,6 +190,35 @@ async function reject(id, userId, ip, motivo) {
   return updated;
 }
 
+async function reprocess(id, userId, ip) {
+  const factura = await invoiceRepo.findById(id);
+  if (!factura) {
+    throw new NotFoundError('Factura no encontrada');
+  }
+
+  const latestJob = await invoiceRepo.findJobByFactura(id);
+  if (latestJob && [JOB_STATES.PENDIENTE, JOB_STATES.EN_PROCESO].includes(latestJob.estado)) {
+    throw new ValidationError('La factura ya tiene un procesamiento en curso');
+  }
+
+  await invoiceRepo.update(id, {
+    estado: INVOICE_STATES.SUBIDA,
+    fecha_procesado: null,
+  });
+
+  const job = await invoiceRepo.createJob(id);
+
+  await auditService.log({
+    usuario_id: userId,
+    factura_id: id,
+    accion: 'REPROCESO_SOLICITADO',
+    detalle: { job_id: job.id },
+    ip,
+  });
+
+  return getById(id);
+}
+
 async function updateData(id, data, userId, asesoriaId, ip) {
   const factura = await invoiceRepo.findById(id);
   if (!factura) {
@@ -298,8 +275,8 @@ async function updateData(id, data, userId, asesoriaId, ip) {
   return getById(id);
 }
 
-async function getStats() {
-  return invoiceRepo.countByEstado();
+async function getStats(asesoriaId, companyId) {
+  return invoiceRepo.countByEstado(asesoriaId, companyId);
 }
 
 module.exports = {
@@ -309,6 +286,7 @@ module.exports = {
   getDocumentFile,
   validate,
   reject,
+  reprocess,
   updateData,
   getStats,
 };

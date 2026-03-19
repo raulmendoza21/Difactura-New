@@ -1,4 +1,15 @@
-export default function StatsCard({ title, value, icon, color = 'blue', subtitle }) {
+import InfoPopover from '../common/InfoPopover';
+
+export default function StatsCard({
+  title,
+  value,
+  icon,
+  color = 'blue',
+  subtitle,
+  infoTitle,
+  infoDescription,
+  infoItems,
+}) {
   const colors = {
     blue: 'from-blue-500 to-blue-600 shadow-blue-200',
     emerald: 'from-emerald-500 to-emerald-600 shadow-emerald-200',
@@ -11,7 +22,18 @@ export default function StatsCard({ title, value, icon, color = 'blue', subtitle
     <div className="card p-5 hover:shadow-md transition-shadow duration-200">
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <p className="text-sm font-medium text-slate-500">{title}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium text-slate-500">{title}</p>
+            {infoTitle && (
+              <InfoPopover
+                title={infoTitle}
+                description={infoDescription}
+                items={infoItems}
+                widthClass="w-64"
+                align="left"
+              />
+            )}
+          </div>
           <p className="text-3xl font-bold text-slate-800 mt-1">{value ?? '-'}</p>
           {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
         </div>

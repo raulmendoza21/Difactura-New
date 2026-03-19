@@ -10,6 +10,10 @@ La nueva arquitectura debe optimizar la primera necesidad del producto:
 
 No se va a construir primero la parte contable completa. La primera arquitectura debe estar pensada para una fase documental robusta y despues crecer hacia la capa contable.
 
+La condicion para entrar en la capa contable es tener un contrato de datos estable entre documento normalizado y propuesta de asiento:
+
+- ver `docs/contrato-datos-documentales-y-contables.md`
+
 ---
 
 ## 2. Enfoque recomendado
