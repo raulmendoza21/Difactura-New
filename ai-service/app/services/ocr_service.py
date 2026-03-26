@@ -6,6 +6,7 @@ import pytesseract
 from PIL import Image
 
 from app.config import settings
+from app.models.document_bundle import BoundingBox, DocumentSpan
 from app.utils.image_processing import build_ocr_variants
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,16 @@ class OCRService:
         if input_kind == "image_photo" and settings.paddle_ocr_enabled:
             paddle_result = self._extract_paddle_image_ocr(image_path)
             if self._is_fast_photo_result_usable(paddle_result):
+                paddle_result["page_entries"] = [
+                    {
+                        "page_number": 1,
+                        "width": float(paddle_result.get("image_width", 0)),
+                        "height": float(paddle_result.get("image_height", 0)),
+                        "text": paddle_result["text"],
+                        "spans": paddle_result.get("spans", []),
+                        "ocr_engine": paddle_result.get("ocr_engine", ""),
+                    }
+                ]
                 logger.info(
                     "OCR extracted %s chars from %s using %s",
                     len(paddle_result["text"]),
@@ -57,6 +68,16 @@ class OCRService:
             path.name,
             result["variant_name"],
         )
+        result["page_entries"] = [
+            {
+                "page_number": 1,
+                "width": float(result.get("image_width", 0)),
+                "height": float(result.get("image_height", 0)),
+                "text": result["text"],
+                "spans": result.get("spans", []),
+                "ocr_engine": result.get("ocr_engine", ""),
+            }
+        ]
         return result
 
     def extract_text_from_pdf_pages(self, file_path: str, input_kind: str = "pdf_scanned") -> str:
@@ -67,6 +88,7 @@ class OCRService:
 
         doc = fitz.open(file_path)
         all_text: list[str] = []
+        page_entries: list[dict] = []
         preprocessing_steps = ["pdf_page_render"]
         best_variant_name = ""
 
@@ -78,6 +100,19 @@ class OCRService:
                 result = self._extract_best_text_from_variants(img, input_kind=input_kind)
 
                 all_text.append(result["text"].strip())
+                page_entries.append(
+                    {
+                        "page_number": page_num + 1,
+                        "width": float(pix.width),
+                        "height": float(pix.height),
+                        "text": result["text"].strip(),
+                        "spans": [
+                            span.model_copy(update={"page": page_num + 1})
+                            for span in result.get("spans", [])
+                        ],
+                        "ocr_engine": result.get("ocr_engine", ""),
+                    }
+                )
                 for step in result["preprocessing_steps"]:
                     if step not in preprocessing_steps:
                         preprocessing_steps.append(step)
@@ -96,6 +131,7 @@ class OCRService:
             "preprocessing_steps": preprocessing_steps,
             "variant_name": best_variant_name,
             "ocr_engine": "tesseract",
+            "page_entries": page_entries,
         }
 
     def is_available(self) -> bool:
@@ -114,11 +150,14 @@ class OCRService:
             "variant_name": "",
             "preprocessing_steps": [],
             "ocr_engine": "tesseract",
+            "spans": [],
+            "image_width": float(image.width),
+            "image_height": float(image.height),
         }
 
         for variant in build_ocr_variants(image, input_kind=input_kind):
             for config in self._get_ocr_configs(input_kind):
-                text, confidences = self._run_ocr_candidate(variant["image"], config)
+                text, confidences, spans = self._run_ocr_candidate(variant["image"], config)
                 score = self._score_ocr_candidate(text, confidences)
                 if score > best_result["score"]:
                     best_result = {
@@ -127,6 +166,9 @@ class OCRService:
                         "variant_name": variant["name"],
                         "preprocessing_steps": variant["preprocessing_steps"],
                         "ocr_engine": "tesseract",
+                        "spans": spans,
+                        "image_width": float(variant["image"].width),
+                        "image_height": float(variant["image"].height),
                     }
 
         return best_result
@@ -172,6 +214,7 @@ class OCRService:
                 "variant_name": "paddle_unavailable",
                 "preprocessing_steps": [],
                 "ocr_engine": "paddleocr",
+                "spans": [],
             }
 
         try:
@@ -184,6 +227,7 @@ class OCRService:
                 "variant_name": "paddle_error",
                 "preprocessing_steps": [],
                 "ocr_engine": "paddleocr",
+                "spans": [],
             }
 
         if not pages:
@@ -193,9 +237,13 @@ class OCRService:
                 "variant_name": "paddle_empty",
                 "preprocessing_steps": [],
                 "ocr_engine": "paddleocr",
+                "spans": [],
             }
 
         page = pages[0]
+        with Image.open(image_path) as image:
+            image_width = float(image.width)
+            image_height = float(image.height)
         texts = [text.strip() for text in (page.get("rec_texts") or []) if str(text).strip()]
         confidences = []
         for value in page.get("rec_scores") or []:
@@ -205,6 +253,23 @@ class OCRService:
                 continue
 
         text = "\n".join(texts)
+        polygons = page.get("rec_polys") or page.get("dt_polys") or []
+        spans: list[DocumentSpan] = []
+        for index, value in enumerate(texts):
+            bbox = self._bbox_from_polygon(polygons[index] if index < len(polygons) else None)
+            spans.append(
+                DocumentSpan(
+                    span_id=f"paddle:p1:b{index}:l0",
+                    page=1,
+                    text=value,
+                    bbox=bbox,
+                    source="ocr",
+                    engine="paddleocr",
+                    block_no=index,
+                    line_no=0,
+                    confidence=round((confidences[index] / 100.0), 2) if index < len(confidences) else None,
+                )
+            )
         return {
             "text": text,
             "score": self._score_ocr_candidate(text, confidences),
@@ -215,6 +280,9 @@ class OCRService:
                 f"text_det_limit_side_len:{settings.paddle_text_det_limit_side_len}",
             ],
             "ocr_engine": "paddleocr",
+            "spans": spans,
+            "image_width": image_width,
+            "image_height": image_height,
         }
 
     def _get_paddle_ocr(self):
@@ -244,7 +312,7 @@ class OCRService:
             logger.warning("PaddleOCR unavailable, falling back to Tesseract: %s", exc)
             return None
 
-    def _run_ocr_candidate(self, image: Image.Image, config: str) -> tuple[str, list[float]]:
+    def _run_ocr_candidate(self, image: Image.Image, config: str) -> tuple[str, list[float], list[DocumentSpan]]:
         text = pytesseract.image_to_string(
             image,
             lang=self.language,
@@ -258,6 +326,7 @@ class OCRService:
         )
 
         confidences: list[float] = []
+        line_map: dict[tuple[int, int], dict] = {}
         for value in data.get("conf", []):
             try:
                 numeric = float(value)
@@ -266,7 +335,76 @@ class OCRService:
             if numeric >= 0:
                 confidences.append(numeric)
 
-        return text, confidences
+        total_items = len(data.get("text", []))
+        for index in range(total_items):
+            token = str(data.get("text", [""])[index] or "").strip()
+            if not token:
+                continue
+            try:
+                token_conf = float(data.get("conf", [0])[index])
+            except (TypeError, ValueError):
+                token_conf = -1
+            if token_conf < 0:
+                continue
+
+            block_no = int(data.get("block_num", [0])[index] or 0)
+            line_no = int(data.get("line_num", [0])[index] or 0)
+            key = (block_no, line_no)
+            current = line_map.setdefault(
+                key,
+                {
+                    "texts": [],
+                    "x0": float(data.get("left", [0])[index]),
+                    "y0": float(data.get("top", [0])[index]),
+                    "x1": float(data.get("left", [0])[index]) + float(data.get("width", [0])[index]),
+                    "y1": float(data.get("top", [0])[index]) + float(data.get("height", [0])[index]),
+                    "confidences": [],
+                },
+            )
+            left = float(data.get("left", [0])[index])
+            top = float(data.get("top", [0])[index])
+            width = float(data.get("width", [0])[index])
+            height = float(data.get("height", [0])[index])
+            current["texts"].append(token)
+            current["x0"] = min(current["x0"], left)
+            current["y0"] = min(current["y0"], top)
+            current["x1"] = max(current["x1"], left + width)
+            current["y1"] = max(current["y1"], top + height)
+            current["confidences"].append(token_conf)
+
+        spans: list[DocumentSpan] = []
+        for (block_no, line_no), payload in sorted(line_map.items(), key=lambda item: (item[1]["y0"], item[1]["x0"])):
+            line_conf = 0.0
+            if payload["confidences"]:
+                line_conf = round((sum(payload["confidences"]) / len(payload["confidences"])) / 100.0, 2)
+            spans.append(
+                DocumentSpan(
+                    span_id=f"tesseract:p1:b{block_no}:l{line_no}",
+                    page=1,
+                    text=" ".join(payload["texts"]).strip(),
+                    bbox=BoundingBox.from_points(payload["x0"], payload["y0"], payload["x1"], payload["y1"]),
+                    source="ocr",
+                    engine="tesseract",
+                    block_no=block_no,
+                    line_no=line_no,
+                    confidence=line_conf,
+                )
+            )
+
+        return text, confidences, spans
+
+    def _bbox_from_polygon(self, polygon) -> BoundingBox:
+        if polygon is None:
+            return BoundingBox()
+        try:
+            points = [(float(point[0]), float(point[1])) for point in polygon]
+        except (TypeError, ValueError, IndexError):
+            return BoundingBox()
+        if not points:
+            return BoundingBox()
+        xs = [point[0] for point in points]
+        ys = [point[1] for point in points]
+        return BoundingBox.from_points(min(xs), min(ys), max(xs), max(ys))
 
     def _score_ocr_candidate(self, text: str, confidences: list[float]) -> float:
         if not text:

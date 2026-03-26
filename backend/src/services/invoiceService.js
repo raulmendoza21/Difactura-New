@@ -147,6 +147,10 @@ async function getById(id) {
         coverage: latestExtraction.detalle_json.coverage || null,
         field_confidence: latestExtraction.detalle_json.field_confidence || {},
         normalized_document: latestExtraction.detalle_json.normalized_document || null,
+        evidence: latestExtraction.detalle_json.evidence || {},
+        decision_flags: latestExtraction.detalle_json.decision_flags || [],
+        company_match: latestExtraction.detalle_json.company_match || null,
+        processing_trace: latestExtraction.detalle_json.processing_trace || [],
         created_at: latestExtraction.created_at,
       }
     : null;

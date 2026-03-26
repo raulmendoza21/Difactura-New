@@ -18,10 +18,17 @@ export default function InvoiceDetailCard({ invoice }) {
   const associatedCompany = invoice.empresa_asociada || null;
   const detectedIssuer = invoice.extraction?.normalized_document?.issuer || null;
   const detectedRecipient = invoice.extraction?.normalized_document?.recipient || null;
+  const evidence = invoice.extraction?.evidence || {};
   const counterpartyConfidence =
     invoice.tipo === 'venta' ? fieldConfidence.cliente : fieldConfidence.proveedor;
   const counterpartyTaxConfidence =
     invoice.tipo === 'venta' ? fieldConfidence.cif_cliente : fieldConfidence.cif_proveedor;
+  const counterpartyField = invoice.tipo === 'venta' ? 'cliente' : 'proveedor';
+  const evidenceSummary = [
+    { label: 'Numero', items: evidence.numero_factura || [] },
+    { label: 'Contraparte', items: evidence[counterpartyField] || [] },
+    { label: 'Total', items: evidence.total || [] },
+  ].filter((entry) => Array.isArray(entry.items) && entry.items.length > 0);
 
   const fields = [
     { label: 'Numero', value: invoice.numero_factura || '-', confidence: fieldConfidence.numero_factura },
@@ -132,6 +139,29 @@ export default function InvoiceDetailCard({ invoice }) {
           ))}
         </div>
       </div>
+
+      {evidenceSummary.length > 0 && (
+        <div className="p-5 bg-white">
+          <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Evidencia principal</h4>
+          <div className="space-y-3">
+            {evidenceSummary.map((entry) => {
+              const primary = entry.items.find((item) => item.source !== 'resolved') || entry.items[0];
+              return (
+                <div key={entry.label} className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs text-slate-400">{entry.label}</p>
+                    <p className="text-sm font-medium text-slate-700">{primary?.value || '-'}</p>
+                  </div>
+                  <div className="text-right text-xs text-slate-400">
+                    <p>{primary?.source || 'resolved'}</p>
+                    {primary?.page ? <p>Pag. {primary.page}</p> : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {invoice.notas && (
         <div className="p-5">

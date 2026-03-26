@@ -5,6 +5,7 @@ import re
 
 import dateparser
 
+from app.models.document_bundle import DocumentBundle
 from app.models.invoice_model import InvoiceData, LineItem
 from app.utils.regex_patterns import (
     BASE_IMPONIBLE,
@@ -122,6 +123,48 @@ class FieldExtractor:
             data.total,
         )
         return data
+
+    def extract_from_bundle(self, bundle: DocumentBundle) -> tuple[InvoiceData, dict[str, InvoiceData]]:
+        region_texts = self._bundle_region_texts(bundle)
+        region_candidates: dict[str, InvoiceData] = {}
+
+        for region_type, text in region_texts.items():
+            if not text.strip():
+                continue
+            region_candidates[region_type] = self.extract(text)
+
+        if "full" not in region_candidates:
+            region_candidates["full"] = self.extract(bundle.raw_text)
+
+        merged = InvoiceData()
+        full_candidate = region_candidates.get("full", InvoiceData())
+        header_candidate = region_candidates.get("header", InvoiceData())
+        parties_candidate = region_candidates.get("parties", InvoiceData())
+        totals_candidate = region_candidates.get("totals", InvoiceData())
+        line_items_candidate = region_candidates.get("line_items", InvoiceData())
+
+        merged.numero_factura = self._prefer_value(
+            header_candidate.numero_factura,
+            full_candidate.numero_factura,
+            parties_candidate.numero_factura,
+        )
+        merged.rectified_invoice_number = self._prefer_value(
+            header_candidate.rectified_invoice_number,
+            full_candidate.rectified_invoice_number,
+        )
+        merged.fecha = self._prefer_value(header_candidate.fecha, full_candidate.fecha, totals_candidate.fecha)
+        merged.proveedor = self._prefer_party_value(parties_candidate.proveedor, header_candidate.proveedor, full_candidate.proveedor)
+        merged.cif_proveedor = self._prefer_value(parties_candidate.cif_proveedor, header_candidate.cif_proveedor, full_candidate.cif_proveedor)
+        merged.cliente = self._prefer_party_value(parties_candidate.cliente, header_candidate.cliente, full_candidate.cliente)
+        merged.cif_cliente = self._prefer_value(parties_candidate.cif_cliente, header_candidate.cif_cliente, full_candidate.cif_cliente)
+        merged.base_imponible = self._prefer_amount(totals_candidate.base_imponible, full_candidate.base_imponible, line_items_candidate.base_imponible)
+        merged.iva_porcentaje = self._prefer_amount(totals_candidate.iva_porcentaje, full_candidate.iva_porcentaje)
+        merged.iva = self._prefer_amount(totals_candidate.iva, full_candidate.iva)
+        merged.retencion_porcentaje = self._prefer_amount(totals_candidate.retencion_porcentaje, full_candidate.retencion_porcentaje)
+        merged.retencion = self._prefer_amount(totals_candidate.retencion, full_candidate.retencion)
+        merged.total = self._prefer_amount(totals_candidate.total, full_candidate.total)
+        merged.lineas = line_items_candidate.lineas or full_candidate.lineas
+        return merged, region_candidates
 
     def _extract_invoice_number(self, text: str, lines: list[str] | None = None) -> str:
         lines = lines or [line.strip() for line in text.split("\n") if line.strip()]
@@ -249,6 +292,43 @@ class FieldExtractor:
             re.fullmatch(r"[A-Z]{0,6}(?:[\s/-]?\d){2,}[A-Z0-9/-]*", cleaned)
             or re.fullmatch(r"[A-Z]{1,6}\d[\w/-]{3,18}", cleaned)
         )
+
+    def _bundle_region_texts(self, bundle: DocumentBundle) -> dict[str, str]:
+        texts = {
+            "full": bundle.raw_text or "",
+            "header": self._region_text(bundle, {"header", "header_left", "header_right", "company_anchor"}),
+            "parties": self._region_text(bundle, {"parties", "header_left", "header_right", "company_anchor"}),
+            "totals": self._region_text(bundle, {"totals", "footer"}),
+            "line_items": self._region_text(bundle, {"line_items", "body"}),
+        }
+        return {key: value.strip() for key, value in texts.items() if value and value.strip()}
+
+    def _region_text(self, bundle: DocumentBundle, region_types: set[str]) -> str:
+        parts = [
+            region.text
+            for region in bundle.regions
+            if region.region_type in region_types and region.text
+        ]
+        return "\n".join(parts).strip()
+
+    def _prefer_value(self, *values: str) -> str:
+        for value in values:
+            if str(value or "").strip():
+                return str(value).strip()
+        return ""
+
+    def _prefer_party_value(self, *values: str) -> str:
+        for value in values:
+            cleaned = str(value or "").strip()
+            if cleaned and not self._looks_like_address_or_contact_line(cleaned):
+                return cleaned
+        return ""
+
+    def _prefer_amount(self, *values: float) -> float:
+        for value in values:
+            if abs(float(value or 0)) > 0:
+                return round(float(value), 2)
+        return 0.0
 
     def _extract_date(self, text: str, lines: list[str] | None = None) -> str:
         lines = lines or [line.strip() for line in text.split("\n") if line.strip()]

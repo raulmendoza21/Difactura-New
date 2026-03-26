@@ -2,6 +2,7 @@
 
 import logging
 import re
+from typing import Any
 
 from app.models.invoice_model import InvoiceData
 
@@ -66,6 +67,46 @@ class ConfidenceScorer:
         )
 
         return round(total_score, 2)
+
+    def score_with_context(
+        self,
+        data: InvoiceData,
+        *,
+        field_confidence: dict[str, float] | None = None,
+        evidence: dict[str, list[Any]] | None = None,
+        decision_flags: list[Any] | None = None,
+        coverage_ratio: float | None = None,
+    ) -> float:
+        score = self.score(data)
+        field_confidence = field_confidence or {}
+        evidence = evidence or {}
+        decision_flags = decision_flags or []
+
+        low_fields = sum(1 for value in field_confidence.values() if isinstance(value, (int, float)) and value < 0.65)
+        supported_fields = sum(1 for items in evidence.values() if items)
+        blocking_flags = sum(1 for flag in decision_flags if getattr(flag, "requires_review", False) and getattr(flag, "severity", "") == "error")
+        warning_flags = sum(1 for flag in decision_flags if getattr(flag, "requires_review", False) and getattr(flag, "severity", "") == "warning")
+
+        if coverage_ratio is not None:
+            if coverage_ratio >= 0.9:
+                score += 0.03
+            elif coverage_ratio < 0.6:
+                score -= 0.08
+
+        if supported_fields >= 8:
+            score += 0.04
+        elif supported_fields <= 4:
+            score -= 0.06
+
+        if low_fields >= 4:
+            score -= 0.12
+        elif low_fields >= 2:
+            score -= 0.06
+
+        score -= min(0.18, blocking_flags * 0.1)
+        score -= min(0.12, warning_flags * 0.04)
+
+        return round(max(0.0, min(1.0, score)), 2)
 
     def _validate_math(self, data: InvoiceData) -> float:
         """Check if base + iva = total (within tolerance)."""

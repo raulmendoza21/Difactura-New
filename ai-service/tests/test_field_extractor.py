@@ -1,6 +1,7 @@
 """Tests for field_extractor."""
 
 import pytest
+from app.models.document_bundle import DocumentBundle, LayoutRegion
 from app.services.field_extractor import FieldExtractor
 
 
@@ -461,3 +462,42 @@ class TestFieldExtractor:
         assert data.base_imponible == 15.98
         assert data.iva == 1.12
         assert len(data.lineas) >= 3
+
+    def test_extract_from_bundle_merges_header_parties_and_totals(self, extractor):
+        bundle = DocumentBundle(
+            raw_text="Factura GC 26001163\nFecha 06/03/2026\nBase imponible 25,00\nTotal 26,75",
+            regions=[
+                LayoutRegion(
+                    region_id="p1:header",
+                    region_type="header",
+                    page=1,
+                    text="Factura\nGC 26001163\nFecha 06/03/2026",
+                ),
+                LayoutRegion(
+                    region_id="p1:parties",
+                    region_type="parties",
+                    page=1,
+                    text="Proveedor: Alberto Villacorta, S.L.U.\nCIF: B35246388\nCliente: DISOFT SERV. INFORM S.L.\nCIF: B35222249",
+                ),
+                LayoutRegion(
+                    region_id="p1:totals",
+                    region_type="totals",
+                    page=1,
+                    text="Base imponible 25,00\nImpuestos 1,75\nTotal 26,75",
+                ),
+            ],
+        )
+
+        data, region_candidates = extractor.extract_from_bundle(bundle)
+
+        assert data.numero_factura == "GC 26001163"
+        assert data.fecha == "2026-03-06"
+        assert data.proveedor == "Alberto Villacorta, S.L.U."
+        assert data.cif_proveedor == "B35246388"
+        assert data.cliente == "DISOFT SERV. INFORM S.L."
+        assert data.cif_cliente == "B35222249"
+        assert data.base_imponible == 25.0
+        assert data.total == 26.75
+        assert "header" in region_candidates
+        assert "parties" in region_candidates
+        assert "totals" in region_candidates

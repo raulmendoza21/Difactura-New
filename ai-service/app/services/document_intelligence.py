@@ -14,10 +14,12 @@ from app.models.document_contract import (
     TaxRegime,
     build_normalized_document_from_invoice_data,
 )
+from app.models.document_bundle import DocumentBundle
 from app.models.extraction_result import ExtractionCoverage
 from app.models.invoice_model import InvoiceData, LineItem
 from app.services.confidence_scorer import confidence_scorer
 from app.services.document_loader import document_loader
+from app.services.evidence_builder import evidence_builder
 from app.services.field_extractor import field_extractor
 from app.services.invoice_classifier import invoice_classifier
 from app.utils.text_processing import parse_amount
@@ -85,16 +87,32 @@ class DocumentIntelligenceService:
         provider_name = settings.doc_ai_provider if settings.doc_ai_enabled else "heuristic"
         uses_images = provider_name == "openai_compatible"
         document = document_loader.load(file_path, mime_type, include_page_images=uses_images)
-        raw_text = document["raw_text"]
+        bundle = document.get("bundle") or DocumentBundle(raw_text=document["raw_text"], page_count=document["pages"])
+        raw_text = bundle.raw_text or document["raw_text"]
         pages = document["pages"]
         input_profile = document["input_profile"]
         fallback_data = self._heuristic_extract(raw_text)
+        bundle_candidate, bundle_sources = field_extractor.extract_from_bundle(bundle)
+        base_candidate = self._merge_with_fallback(bundle_candidate, fallback_data)
 
         warnings: list[str] = []
-        method = document["method"]
+        base_candidate, base_warnings = self._normalize_invoice_data(
+            base_candidate,
+            fallback_data,
+            raw_text=raw_text,
+            company_context=company_context,
+        )
+        warnings.extend(base_warnings)
+
+        method = "doc_bundle"
         provider = "heuristic"
-        data = fallback_data
+        data = base_candidate
         ai_candidate: InvoiceData | None = None
+        data.tipo_factura = self._infer_invoice_type(
+            invoice=data,
+            raw_text=raw_text,
+            company_context=company_context,
+        )
 
         if settings.doc_ai_enabled:
             try:
@@ -105,11 +123,11 @@ class DocumentIntelligenceService:
                     filename=filename,
                 )
                 ai_candidate = ai_data.model_copy(deep=True)
-                warnings.extend(self._compare_source_candidates(ai_candidate, fallback_data))
-                ai_data = self._merge_with_fallback(ai_data, fallback_data)
+                warnings.extend(self._compare_source_candidates(ai_candidate, base_candidate))
+                ai_data = self._merge_with_fallback(ai_data, base_candidate)
                 ai_data, normalization_warnings = self._normalize_invoice_data(
                     ai_data,
-                    fallback_data,
+                    base_candidate,
                     raw_text=raw_text,
                     company_context=company_context,
                 )
@@ -119,24 +137,27 @@ class DocumentIntelligenceService:
                     raw_text=raw_text,
                     company_context=company_context,
                 )
-                ai_data.confianza = confidence_scorer.score(ai_data)
                 data = ai_data
-                method = "doc_ai"
+                method = "doc_bundle_doc_ai"
             except Exception as exc:
                 formatted_exc = self._format_exception(exc)
                 logger.warning("Doc AI extraction failed, falling back to heuristics: %s", formatted_exc)
                 warnings.append(f"doc_ai_fallback: {formatted_exc}")
 
+        company_match = self._build_company_match(data=data, company_context=company_context)
+        evidence = evidence_builder.build_field_evidence(
+            bundle=bundle,
+            final=data,
+            heuristic=fallback_data,
+            bundle_candidate=bundle_candidate,
+            ai_candidate=ai_candidate,
+        )
         field_confidence = self._build_field_confidence(
             final=data,
             heuristic=fallback_data,
+            bundle_candidate=bundle_candidate,
             ai_candidate=ai_candidate,
-        )
-        data.confianza = self._refine_document_confidence(
-            invoice=data,
-            current_confidence=data.confianza,
-            field_confidence=field_confidence,
-            warnings=warnings,
+            evidence=evidence,
         )
         normalized_document = self._build_extraction_document(
             invoice=data,
@@ -150,6 +171,36 @@ class DocumentIntelligenceService:
             warnings=warnings,
         )
         coverage = self._build_extraction_coverage(normalized_document)
+        decision_flags = evidence_builder.build_decision_flags(
+            invoice=data,
+            field_confidence=field_confidence,
+            warnings=warnings,
+            company_match=company_match,
+        )
+        base_confidence = self._refine_document_confidence(
+            invoice=data,
+            current_confidence=confidence_scorer.score(data),
+            field_confidence=field_confidence,
+            warnings=warnings,
+        )
+        adjusted_confidence = confidence_scorer.score_with_context(
+            data,
+            field_confidence=field_confidence,
+            evidence=evidence,
+            decision_flags=decision_flags,
+            coverage_ratio=coverage.completeness_ratio,
+        )
+        data.confianza = round(min(base_confidence, adjusted_confidence), 2)
+        normalized_document.document_meta.extraction_confidence = data.confianza
+        processing_trace = evidence_builder.build_processing_trace(
+            bundle=bundle,
+            input_kind=input_profile.get("input_kind", ""),
+            provider=provider,
+            method=method,
+            used_ocr=bool(input_profile.get("used_ocr")),
+            used_ai=ai_candidate is not None,
+            page_count=pages,
+        )
 
         return {
             "success": True,
@@ -158,6 +209,10 @@ class DocumentIntelligenceService:
             "field_confidence": field_confidence,
             "normalized_document": normalized_document,
             "coverage": coverage,
+            "evidence": evidence,
+            "decision_flags": decision_flags,
+            "company_match": company_match,
+            "processing_trace": processing_trace,
             "raw_text": raw_text,
             "method": method,
             "provider": provider,
@@ -620,6 +675,48 @@ class DocumentIntelligenceService:
         anchor = self._company_anchor_token(company_name)
         return bool(anchor and anchor in normalized_name)
 
+    def _build_company_match(self, *, data: InvoiceData, company_context: dict[str, str] | None = None) -> dict[str, Any]:
+        company = self._normalize_company_context(company_context)
+        if not company["name"] and not company["tax_id"]:
+            return {
+                "issuer_matches_company": False,
+                "recipient_matches_company": False,
+                "matched_role": "",
+                "matched_by": "",
+                "confidence": 0.0,
+            }
+
+        issuer_matches = self._matches_company_context(data.proveedor, data.cif_proveedor, company)
+        recipient_matches = self._matches_company_context(data.cliente, data.cif_cliente, company)
+        if issuer_matches and recipient_matches:
+            matched_role = "ambiguous"
+        elif issuer_matches:
+            matched_role = "issuer"
+        elif recipient_matches:
+            matched_role = "recipient"
+        else:
+            matched_role = ""
+
+        matched_by = "tax_id" if company["tax_id"] and (
+            self._clean_tax_id(data.cif_proveedor) == company["tax_id"]
+            or self._clean_tax_id(data.cif_cliente) == company["tax_id"]
+        ) else "name" if matched_role else ""
+        confidence = 0.0
+        if matched_role == "ambiguous":
+            confidence = 0.45
+        elif matched_role and matched_by == "tax_id":
+            confidence = 0.95
+        elif matched_role:
+            confidence = 0.75
+
+        return {
+            "issuer_matches_company": issuer_matches,
+            "recipient_matches_company": recipient_matches,
+            "matched_role": matched_role,
+            "matched_by": matched_by,
+            "confidence": round(confidence, 2),
+        }
+
     def _company_anchor_token(self, value: str) -> str:
         legal_tokens = {
             "SL",
@@ -1074,6 +1171,7 @@ class DocumentIntelligenceService:
         warnings: list[str],
     ) -> NormalizedInvoiceDocument:
         document_type = self._infer_document_type(raw_text, invoice)
+        document_type = self._apply_document_type_hint(document_type, input_profile.get("document_family_hint", ""))
         tax_regime = self._infer_tax_regime(raw_text, invoice)
         due_date = self._extract_due_date(raw_text)
         payment_method = self._extract_payment_method(raw_text)
@@ -1098,6 +1196,18 @@ class DocumentIntelligenceService:
             warnings=warnings,
             raw_text_excerpt=raw_text[:400],
         )
+
+    def _apply_document_type_hint(self, current: DocumentType, hint: str) -> DocumentType:
+        hint_map: dict[str, DocumentType] = {
+            "factura_rectificativa": "factura_rectificativa",
+            "factura_simplificada": "factura_simplificada",
+            "ticket": "ticket",
+            "invoice": "factura_completa",
+        }
+        hinted = hint_map.get(hint or "", "desconocido")
+        if current != "desconocido":
+            return current
+        return hinted
 
     def _compare_source_candidates(self, ai_candidate: InvoiceData, heuristic: InvoiceData) -> list[str]:
         warnings: list[str] = []
@@ -1143,31 +1253,88 @@ class DocumentIntelligenceService:
         *,
         final: InvoiceData,
         heuristic: InvoiceData,
-        ai_candidate: InvoiceData | None,
+        bundle_candidate: InvoiceData | None = None,
+        ai_candidate: InvoiceData | None = None,
+        evidence: dict[str, list[Any]] | None = None,
     ) -> dict[str, float]:
-        return {
-            "numero_factura": self._score_field_confidence(final.numero_factura, heuristic.numero_factura, getattr(ai_candidate, "numero_factura", "")),
-            "fecha": self._score_field_confidence(final.fecha, heuristic.fecha, getattr(ai_candidate, "fecha", ""), validator=self._is_valid_iso_date),
-            "proveedor": self._score_field_confidence(final.proveedor, heuristic.proveedor, getattr(ai_candidate, "proveedor", "")),
+        evidence = evidence or {}
+        scores = {
+            "numero_factura": self._score_field_confidence(
+                final.numero_factura,
+                heuristic.numero_factura,
+                getattr(bundle_candidate, "numero_factura", ""),
+                getattr(ai_candidate, "numero_factura", ""),
+                evidence_items=evidence.get("numero_factura", []),
+            ),
+            "fecha": self._score_field_confidence(
+                final.fecha,
+                heuristic.fecha,
+                getattr(bundle_candidate, "fecha", ""),
+                getattr(ai_candidate, "fecha", ""),
+                validator=self._is_valid_iso_date,
+                evidence_items=evidence.get("fecha", []),
+            ),
+            "proveedor": self._score_field_confidence(
+                final.proveedor,
+                heuristic.proveedor,
+                getattr(bundle_candidate, "proveedor", ""),
+                getattr(ai_candidate, "proveedor", ""),
+                evidence_items=evidence.get("proveedor", []),
+            ),
             "cif_proveedor": self._score_field_confidence(
                 final.cif_proveedor,
                 heuristic.cif_proveedor,
+                getattr(bundle_candidate, "cif_proveedor", ""),
                 getattr(ai_candidate, "cif_proveedor", ""),
                 validator=self._is_valid_tax_id,
+                evidence_items=evidence.get("cif_proveedor", []),
             ),
-            "cliente": self._score_field_confidence(final.cliente, heuristic.cliente, getattr(ai_candidate, "cliente", "")),
+            "cliente": self._score_field_confidence(
+                final.cliente,
+                heuristic.cliente,
+                getattr(bundle_candidate, "cliente", ""),
+                getattr(ai_candidate, "cliente", ""),
+                evidence_items=evidence.get("cliente", []),
+            ),
             "cif_cliente": self._score_field_confidence(
                 final.cif_cliente,
                 heuristic.cif_cliente,
+                getattr(bundle_candidate, "cif_cliente", ""),
                 getattr(ai_candidate, "cif_cliente", ""),
                 validator=self._is_valid_tax_id,
+                evidence_items=evidence.get("cif_cliente", []),
             ),
-            "base_imponible": self._score_field_confidence(final.base_imponible, heuristic.base_imponible, getattr(ai_candidate, "base_imponible", 0.0)),
-            "iva_porcentaje": self._score_field_confidence(final.iva_porcentaje, heuristic.iva_porcentaje, getattr(ai_candidate, "iva_porcentaje", 0.0)),
-            "iva": self._score_field_confidence(final.iva, heuristic.iva, getattr(ai_candidate, "iva", 0.0)),
-            "total": self._score_field_confidence(final.total, heuristic.total, getattr(ai_candidate, "total", 0.0)),
-            "lineas": self._score_line_field_confidence(final, heuristic, ai_candidate),
+            "base_imponible": self._score_field_confidence(
+                final.base_imponible,
+                heuristic.base_imponible,
+                getattr(bundle_candidate, "base_imponible", 0.0),
+                getattr(ai_candidate, "base_imponible", 0.0),
+                evidence_items=evidence.get("base_imponible", []),
+            ),
+            "iva_porcentaje": self._score_field_confidence(
+                final.iva_porcentaje,
+                heuristic.iva_porcentaje,
+                getattr(bundle_candidate, "iva_porcentaje", 0.0),
+                getattr(ai_candidate, "iva_porcentaje", 0.0),
+                evidence_items=evidence.get("iva_porcentaje", []),
+            ),
+            "iva": self._score_field_confidence(
+                final.iva,
+                heuristic.iva,
+                getattr(bundle_candidate, "iva", 0.0),
+                getattr(ai_candidate, "iva", 0.0),
+                evidence_items=evidence.get("iva", []),
+            ),
+            "total": self._score_field_confidence(
+                final.total,
+                heuristic.total,
+                getattr(bundle_candidate, "total", 0.0),
+                getattr(ai_candidate, "total", 0.0),
+                evidence_items=evidence.get("total", []),
+            ),
+            "lineas": self._score_line_field_confidence(final, heuristic, bundle_candidate, ai_candidate, evidence.get("lineas", [])),
         }
+        return scores
 
     def _refine_document_confidence(
         self,
@@ -1280,17 +1447,21 @@ class DocumentIntelligenceService:
         self,
         final_value: Any,
         heuristic_value: Any,
+        bundle_value: Any,
         ai_value: Any,
         *,
         validator: Any | None = None,
+        evidence_items: list[Any] | None = None,
     ) -> float:
         if self._is_empty_value(final_value):
             return 0.0
 
+        evidence_items = evidence_items or []
         final_valid = bool(validator(final_value)) if validator else True
         score = 0.45 if final_valid else 0.25
 
         heuristic_present = not self._is_empty_value(heuristic_value)
+        bundle_present = not self._is_empty_value(bundle_value)
         ai_present = not self._is_empty_value(ai_value)
 
         if heuristic_present and self._values_match(final_value, heuristic_value):
@@ -1298,13 +1469,26 @@ class DocumentIntelligenceService:
         elif heuristic_present:
             score -= 0.1
 
+        if bundle_present and self._values_match(final_value, bundle_value):
+            score += 0.18
+        elif bundle_present:
+            score -= 0.08
+
         if ai_present and self._values_match(final_value, ai_value):
             score += 0.25
         elif ai_present:
             score -= 0.1
 
+        supporting_evidence = sum(1 for item in evidence_items if getattr(item, "value", "") and getattr(item, "source", "") != "resolved")
+        if supporting_evidence >= 2:
+            score += 0.07
+        elif supporting_evidence == 1:
+            score += 0.03
+
         if heuristic_present and ai_present and self._values_match(heuristic_value, ai_value):
             score += 0.1
+        if bundle_present and heuristic_present and self._values_match(bundle_value, heuristic_value):
+            score += 0.05
 
         return round(max(0.0, min(1.0, score)), 2)
 
@@ -1312,11 +1496,14 @@ class DocumentIntelligenceService:
         self,
         final: InvoiceData,
         heuristic: InvoiceData,
+        bundle_candidate: InvoiceData | None,
         ai_candidate: InvoiceData | None,
+        evidence_items: list[Any] | None = None,
     ) -> float:
         if not final.lineas:
             return 0.0
 
+        evidence_items = evidence_items or []
         score = 0.35 if confidence_scorer._validate_line_items(final) > 0 else 0.2
         if confidence_scorer._validate_line_items(final) >= 0.8:
             score += 0.2
@@ -1326,10 +1513,18 @@ class DocumentIntelligenceService:
         elif heuristic.lineas:
             score -= 0.1
 
+        if bundle_candidate and bundle_candidate.lineas and self._line_items_match(final.lineas, bundle_candidate.lineas):
+            score += 0.18
+        elif bundle_candidate and bundle_candidate.lineas:
+            score -= 0.08
+
         if ai_candidate and ai_candidate.lineas and self._line_items_match(final.lineas, ai_candidate.lineas):
             score += 0.25
         elif ai_candidate and ai_candidate.lineas:
             score -= 0.1
+
+        if len(evidence_items) >= 2:
+            score += 0.07
 
         return round(max(0.0, min(1.0, score)), 2)
 

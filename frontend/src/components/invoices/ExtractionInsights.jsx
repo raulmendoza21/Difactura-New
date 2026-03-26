@@ -62,6 +62,20 @@ function formatTechnicalWarnings(warnings = []) {
   return normalizedItems;
 }
 
+function formatCompanyMatch(companyMatch) {
+  if (!companyMatch?.matched_role) return '';
+  if (companyMatch.matched_role === 'issuer') {
+    return 'La empresa asociada encaja con el emisor documental.';
+  }
+  if (companyMatch.matched_role === 'recipient') {
+    return 'La empresa asociada encaja con el receptor documental.';
+  }
+  if (companyMatch.matched_role === 'ambiguous') {
+    return 'La empresa asociada encaja con ambas partes documentales y puede haber ambiguedad.';
+  }
+  return '';
+}
+
 export default function ExtractionInsights({ extraction }) {
   if (!extraction) return null;
 
@@ -70,10 +84,12 @@ export default function ExtractionInsights({ extraction }) {
   const provider = extraction.provider || extraction.normalized_document?.document_meta?.extraction_provider;
   const missingFields = extraction.coverage?.missing_required_fields || [];
   const technicalWarnings = formatTechnicalWarnings(extraction.warnings);
+  const companyMatchText = formatCompanyMatch(extraction.company_match);
   const confidence = typeof extraction.confianza === 'number'
     ? extraction.confianza
     : extraction.normalized_document?.document_meta?.extraction_confidence;
   const fieldConfidence = extraction.field_confidence || {};
+  const processingTrace = extraction.processing_trace || [];
 
   const items = [];
 
@@ -108,6 +124,18 @@ export default function ExtractionInsights({ extraction }) {
 
   if (technicalWarnings.length > 0) {
     items.push(...technicalWarnings);
+  }
+
+  if (companyMatchText) {
+    items.push(companyMatchText);
+  }
+
+  if (processingTrace.length > 0) {
+    processingTrace.slice(0, 3).forEach((step) => {
+      if (step?.summary) {
+        items.push(step.summary);
+      }
+    });
   }
 
   const tone = typeof confidence === 'number' && confidence < 0.8 ? 'warning' : 'info';

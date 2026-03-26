@@ -51,13 +51,13 @@ function alignDetectedPartiesWithLinkedCompany(result, factura) {
   const issuer = partyFromResult(result, 'issuer');
   const recipient = partyFromResult(result, 'recipient');
 
-  if (matchesLinkedCompany(issuer, factura)) {
+  if (matchesLinkedCompany(issuer, factura) && (!result.normalized_document.issuer?.name || !result.normalized_document.issuer?.tax_id)) {
     result.normalized_document.issuer.name = factura.cliente_nombre || issuer.name;
     result.normalized_document.issuer.legal_name = factura.cliente_nombre || issuer.name;
     result.normalized_document.issuer.tax_id = factura.cliente_cif || issuer.taxId;
   }
 
-  if (matchesLinkedCompany(recipient, factura)) {
+  if (matchesLinkedCompany(recipient, factura) && (!result.normalized_document.recipient?.name || !result.normalized_document.recipient?.tax_id)) {
     result.normalized_document.recipient.name = factura.cliente_nombre || recipient.name;
     result.normalized_document.recipient.legal_name = factura.cliente_nombre || recipient.name;
     result.normalized_document.recipient.tax_id = factura.cliente_cif || recipient.taxId;
@@ -72,6 +72,22 @@ function setNormalizedParty(target, party) {
   target.name = party?.name || '';
   target.legal_name = party?.name || '';
   target.tax_id = party?.taxId || '';
+}
+
+function patchNormalizedParty(target, party) {
+  if (!target) {
+    return;
+  }
+
+  if (!target.name) {
+    target.name = party?.name || '';
+  }
+  if (!target.legal_name) {
+    target.legal_name = party?.name || '';
+  }
+  if (!target.tax_id) {
+    target.tax_id = party?.taxId || '';
+  }
 }
 
 function synchronizeExtractionWithBusinessContext(result, factura, tipoFactura, counterparty) {
@@ -103,8 +119,19 @@ function synchronizeExtractionWithBusinessContext(result, factura, tipoFactura, 
     ? { name: result.cliente || '', taxId: result.cif_cliente || '' }
     : companyParty;
 
-  setNormalizedParty(result.normalized_document.issuer, issuerParty);
-  setNormalizedParty(result.normalized_document.recipient, recipientParty);
+  const normalizedIssuer = result.normalized_document.issuer || {};
+  const normalizedRecipient = result.normalized_document.recipient || {};
+  const hasResolvedDocumentParties = Boolean(
+    (normalizedIssuer.name || normalizedIssuer.tax_id) && (normalizedRecipient.name || normalizedRecipient.tax_id)
+  );
+
+  if (hasResolvedDocumentParties) {
+    patchNormalizedParty(result.normalized_document.issuer, issuerParty);
+    patchNormalizedParty(result.normalized_document.recipient, recipientParty);
+  } else {
+    setNormalizedParty(result.normalized_document.issuer, issuerParty);
+    setNormalizedParty(result.normalized_document.recipient, recipientParty);
+  }
 
   if (result.normalized_document.identity) {
     result.normalized_document.identity.invoice_number = result.numero_factura || result.normalized_document.identity.invoice_number || '';
@@ -144,6 +171,30 @@ function synchronizeExtractionWithBusinessContext(result, factura, tipoFactura, 
 }
 
 function inferInvoiceType(result, factura) {
+  const normalizedKind = result?.normalized_document?.classification?.operation_kind;
+  if (normalizedKind === 'venta') {
+    return 'venta';
+  }
+  if (normalizedKind === 'compra') {
+    return 'compra';
+  }
+
+  const normalizedSide = result?.normalized_document?.classification?.invoice_side;
+  if (normalizedSide === 'emitida') {
+    return 'venta';
+  }
+  if (normalizedSide === 'recibida') {
+    return 'compra';
+  }
+
+  const matchedRole = result?.company_match?.matched_role;
+  if (matchedRole === 'issuer') {
+    return 'venta';
+  }
+  if (matchedRole === 'recipient') {
+    return 'compra';
+  }
+
   const issuer = partyFromResult(result, 'issuer');
   const recipient = partyFromResult(result, 'recipient');
 
@@ -310,6 +361,10 @@ async function processJob(job) {
         coverage: result.coverage || null,
         field_confidence: result.field_confidence || {},
         normalized_document: result.normalized_document || null,
+        evidence: result.evidence || {},
+        decision_flags: result.decision_flags || [],
+        company_match: result.company_match || null,
+        processing_trace: result.processing_trace || [],
       },
     });
   } catch (error) {

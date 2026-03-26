@@ -1,5 +1,8 @@
 """Tests for document intelligence service."""
 
+from unittest.mock import patch
+
+from app.models.document_bundle import DocumentBundle
 from app.models.invoice_model import InvoiceData, LineItem
 from app.services.document_intelligence import DocumentIntelligenceService
 
@@ -810,3 +813,72 @@ class TestDocumentIntelligenceService:
         company_score = service._party_candidate_score("Proveedor Atlantico SL", "B12345678")
 
         assert address_score < company_score
+
+    def test_build_company_match_detects_associated_company_on_issuer(self):
+        service = DocumentIntelligenceService()
+
+        company_match = service._build_company_match(
+            data=InvoiceData(
+                proveedor="Tecnocanarias Soluciones Digitales SL",
+                cif_proveedor="B12345678",
+                cliente="Cliente Final SL",
+                cif_cliente="B55555555",
+            ),
+            company_context={
+                "name": "Tecnocanarias Soluciones Digitales SL",
+                "tax_id": "B12345678",
+            },
+        )
+
+        assert company_match["issuer_matches_company"] is True
+        assert company_match["recipient_matches_company"] is False
+        assert company_match["matched_role"] == "issuer"
+        assert company_match["matched_by"] == "tax_id"
+
+    def test_extract_uses_document_bundle_from_loader_and_returns_evidence(self):
+        service = DocumentIntelligenceService()
+        bundle = DocumentBundle(raw_text="Factura F-1\nFecha 15/03/2026\nTotal 121,00")
+
+        async def run():
+            with (
+                patch(
+                    "app.services.document_intelligence.document_loader.load",
+                    return_value={
+                        "raw_text": bundle.raw_text,
+                        "pages": 1,
+                        "method": "ocr",
+                        "page_images": [],
+                        "input_profile": {
+                            "input_kind": "image_scan",
+                            "text_source": "ocr",
+                            "used_ocr": True,
+                            "ocr_engine": "tesseract",
+                            "preprocessing_steps": [],
+                        },
+                        "bundle": bundle,
+                    },
+                ),
+                patch.object(
+                    service,
+                    "_heuristic_extract",
+                    return_value=InvoiceData(
+                        numero_factura="F-1",
+                        fecha="2026-03-15",
+                        proveedor="Proveedor Demo SL",
+                        cif_proveedor="B12345678",
+                        base_imponible=100,
+                        iva_porcentaje=21,
+                        iva=21,
+                        total=121,
+                    ),
+                ),
+            ):
+                result = await service.extract("invoice.png", "invoice.png", "image/png")
+                assert "evidence" in result
+                assert "decision_flags" in result
+                assert "company_match" in result
+                assert "processing_trace" in result
+
+        import asyncio
+
+        asyncio.run(run())

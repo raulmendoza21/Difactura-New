@@ -19,6 +19,7 @@ function buildWarnings(invoice) {
   const taxLabel = getTaxLabel(invoice);
   const taxIdLabel = getTaxIdLabel();
   const extractionWarnings = invoice.extraction?.warnings || [];
+  const decisionFlags = invoice.extraction?.decision_flags || [];
   const warningSet = new Set(extractionWarnings);
   const base = toNumber(invoice.base_imponible);
   const tax = toNumber(invoice.iva_importe);
@@ -45,6 +46,14 @@ function buildWarnings(invoice) {
     || warningSet.has('discrepancia_base_imponible')
     || warningSet.has('discrepancia_iva_importe')
     || warningSet.has('discrepancia_iva_porcentaje');
+
+  decisionFlags.forEach((flag) => {
+    if (!flag?.message) return;
+    warnings.push({
+      tone: flag.severity === 'error' ? 'error' : flag.requires_review ? 'warning' : 'info',
+      text: flag.message,
+    });
+  });
 
   if (jobError) {
     warnings.push({

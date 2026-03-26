@@ -93,6 +93,13 @@ async def process_invoice(
             "field_confidence": result["field_confidence"],
             "normalized_document": result["normalized_document"].model_dump(),
             "coverage": result["coverage"].model_dump(),
+            "evidence": {
+                key: [item.model_dump() for item in items]
+                for key, items in (result.get("evidence") or {}).items()
+            },
+            "decision_flags": [item.model_dump() for item in result.get("decision_flags", [])],
+            "company_match": result.get("company_match") or None,
+            "processing_trace": [item.model_dump() for item in result.get("processing_trace", [])],
             "raw_text": raw_text,
             "method": result["method"],
             "provider": result["provider"],
