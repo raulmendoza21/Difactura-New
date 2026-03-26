@@ -14,7 +14,7 @@ from app.models.document_contract import (
     TaxRegime,
     build_normalized_document_from_invoice_data,
 )
-from app.models.document_bundle import DocumentBundle
+from app.models.document_bundle import BoundingBox, DocumentBundle, DocumentSpan, LayoutRegion
 from app.models.extraction_result import ExtractionCoverage
 from app.models.invoice_model import InvoiceData, LineItem
 from app.services.confidence_scorer import confidence_scorer
@@ -103,6 +103,29 @@ class DocumentIntelligenceService:
             company_context=company_context,
         )
         warnings.extend(base_warnings)
+
+        bundle, raw_text, rescue_applied = self._maybe_apply_region_hint_rescue(
+            file_path=file_path,
+            input_profile=input_profile,
+            company_context=company_context,
+            bundle=bundle,
+            raw_text=raw_text,
+            base_candidate=base_candidate,
+        )
+        if rescue_applied:
+            if "region_hint_rescue" not in input_profile.setdefault("preprocessing_steps", []):
+                input_profile["preprocessing_steps"].append("region_hint_rescue")
+            warnings.append("region_hint_rescue_applied")
+            fallback_data = self._heuristic_extract(raw_text)
+            bundle_candidate, bundle_sources = field_extractor.extract_from_bundle(bundle)
+            base_candidate = self._merge_with_fallback(bundle_candidate, fallback_data)
+            base_candidate, rescue_warnings = self._normalize_invoice_data(
+                base_candidate,
+                fallback_data,
+                raw_text=raw_text,
+                company_context=company_context,
+            )
+            warnings.extend(rescue_warnings)
 
         method = "doc_bundle"
         provider = "heuristic"
@@ -542,7 +565,7 @@ class DocumentIntelligenceService:
                 normalized.cif_cliente = company["tax_id"] or normalized.cif_cliente
 
         elif family == "withholding_purchase":
-            header_provider = self._extract_provider_from_header(raw_text, company)
+            header_provider = self._extract_ranked_provider_from_header(raw_text, company)
             if header_provider:
                 normalized.proveedor = header_provider
             if fallback.proveedor and not self._matches_company_context(fallback.proveedor, fallback.cif_proveedor, company):
@@ -629,11 +652,11 @@ class DocumentIntelligenceService:
                 warnings.append("cliente_restaurado_desde_fallback")
 
         if provider_matches and not client_matches:
-            if self._party_candidate_score(fallback.cliente, fallback.cif_cliente) >= self._party_candidate_score(normalized.cliente, normalized.cif_cliente):
+            if self._party_candidate_score(fallback.cliente, fallback.cif_cliente) > self._party_candidate_score(normalized.cliente, normalized.cif_cliente):
                 normalized.cliente = fallback.cliente or normalized.cliente
                 normalized.cif_cliente = fallback.cif_cliente or normalized.cif_cliente
         elif client_matches and not provider_matches:
-            if self._party_candidate_score(fallback.proveedor, fallback.cif_proveedor) >= self._party_candidate_score(normalized.proveedor, normalized.cif_proveedor):
+            if self._party_candidate_score(fallback.proveedor, fallback.cif_proveedor) > self._party_candidate_score(normalized.proveedor, normalized.cif_proveedor):
                 normalized.proveedor = fallback.proveedor or normalized.proveedor
                 normalized.cif_proveedor = fallback.cif_proveedor or normalized.cif_proveedor
 
@@ -655,7 +678,7 @@ class DocumentIntelligenceService:
         company_context = company_context or {}
         return {
             "name": self._normalize_party_name(company_context.get("name", "")),
-            "tax_id": self._clean_tax_id(company_context.get("tax_id", "")),
+            "tax_id": self._clean_tax_id(company_context.get("tax_id", "") or company_context.get("taxId", "")),
         }
 
     def _matches_company_context(self, name: str, tax_id: str, company: dict[str, str]) -> bool:
@@ -716,6 +739,149 @@ class DocumentIntelligenceService:
             "matched_by": matched_by,
             "confidence": round(confidence, 2),
         }
+
+    def _maybe_apply_region_hint_rescue(
+        self,
+        *,
+        file_path: str,
+        input_profile: dict[str, Any],
+        company_context: dict[str, str] | None,
+        bundle: DocumentBundle,
+        raw_text: str,
+        base_candidate: InvoiceData,
+    ) -> tuple[DocumentBundle, str, bool]:
+        if not self._should_run_region_hint_rescue(
+            base_candidate=base_candidate,
+            input_profile=input_profile,
+            company_context=company_context,
+        ):
+            return bundle, raw_text, False
+
+        from app.services.ocr_service import ocr_service
+
+        try:
+            region_hints = ocr_service.extract_region_hints(
+                file_path,
+                input_kind=input_profile.get("input_kind", "pdf_scanned"),
+                max_pages=1,
+            )
+        except Exception as exc:
+            logger.warning("Region hint OCR rescue failed: %s", self._format_exception(exc))
+            return bundle, raw_text, False
+
+        if not region_hints:
+            return bundle, raw_text, False
+
+        region_hints = sorted(
+            region_hints,
+            key=lambda hint: (
+                self._region_hint_priority(str(hint.get("region_type", "") or "")),
+                int(hint.get("page_number", 1) or 1),
+            ),
+        )
+
+        rescued_bundle = bundle.model_copy(deep=True)
+        normalized_raw_text = self._normalize_hint_lookup(raw_text)
+        additional_texts: list[str] = []
+
+        for index, hint in enumerate(region_hints, start=1):
+            text = str(hint.get("text", "") or "").strip()
+            if not text:
+                continue
+
+            page_number = int(hint.get("page_number", 1) or 1)
+            bbox_payload = hint.get("bbox") or {}
+            bbox = BoundingBox.from_points(
+                float(bbox_payload.get("x0", 0) or 0),
+                float(bbox_payload.get("y0", 0) or 0),
+                float(bbox_payload.get("x1", 0) or 0),
+                float(bbox_payload.get("y1", 0) or 0),
+            )
+            region_type = str(hint.get("region_type", "") or "").strip() or "header"
+            region = LayoutRegion(
+                region_id=f"rescue:p{page_number}:{region_type}:{index}",
+                region_type=region_type,
+                page=page_number,
+                bbox=bbox,
+                text=text,
+                confidence=0.88,
+            )
+            span = DocumentSpan(
+                span_id=f"rescue:p{page_number}:{region_type}:{index}",
+                page=page_number,
+                text=text,
+                bbox=bbox,
+                source="ocr_region",
+                engine="tesseract",
+                block_no=900 + index,
+                line_no=0,
+                confidence=0.88,
+            )
+            rescued_bundle.regions.append(region)
+            rescued_bundle.spans.append(span)
+
+            page_index = page_number - 1
+            if 0 <= page_index < len(rescued_bundle.pages):
+                rescued_bundle.pages[page_index].spans.append(span)
+                page_text = rescued_bundle.pages[page_index].reading_text or ""
+                if self._normalize_hint_lookup(text) not in self._normalize_hint_lookup(page_text):
+                    rescued_bundle.pages[page_index].reading_text = "\n".join(
+                        part for part in (page_text.strip(), text) if part
+                    ).strip()
+                    rescued_bundle.pages[page_index].ocr_text = "\n".join(
+                        part for part in (rescued_bundle.pages[page_index].ocr_text.strip(), text) if part
+                    ).strip()
+
+            if self._normalize_hint_lookup(text) not in normalized_raw_text:
+                additional_texts.append(text)
+
+        if additional_texts:
+            rescued_bundle.raw_text = "\n".join(
+                part for part in (*additional_texts, raw_text.strip()) if part
+            ).strip()
+            rescued_bundle.page_texts = [page.reading_text for page in rescued_bundle.pages]
+
+        return rescued_bundle, rescued_bundle.raw_text or raw_text, True
+
+    def _should_run_region_hint_rescue(
+        self,
+        *,
+        base_candidate: InvoiceData,
+        input_profile: dict[str, Any],
+        company_context: dict[str, str] | None,
+    ) -> bool:
+        company = self._normalize_company_context(company_context)
+        if not company["name"] and not company["tax_id"]:
+            return False
+
+        input_kind = input_profile.get("input_kind", "")
+        if input_kind not in {"pdf_scanned", "image_scan", "image_photo"}:
+            return False
+
+        provider_matches = self._matches_company_context(base_candidate.proveedor, base_candidate.cif_proveedor, company)
+        client_matches = self._matches_company_context(base_candidate.cliente, base_candidate.cif_cliente, company)
+        if provider_matches or client_matches:
+            return False
+
+        provider_value = str(base_candidate.proveedor or "").strip()
+        client_value = str(base_candidate.cliente or "").strip()
+        missing_party = not provider_value or not client_value
+        long_noise_party = len(provider_value) > 90 or len(client_value) > 90
+        missing_tax_ids = not base_candidate.cif_proveedor or not base_candidate.cif_cliente
+
+        return missing_party or long_noise_party or missing_tax_ids
+
+    def _normalize_hint_lookup(self, value: str) -> str:
+        return re.sub(r"\s+", " ", str(value or "").upper()).strip()
+
+    def _region_hint_priority(self, region_type: str) -> int:
+        priorities = {
+            "header_left": 0,
+            "header_right": 1,
+            "header": 2,
+            "totals": 3,
+        }
+        return priorities.get(region_type, 9)
 
     def _company_anchor_token(self, value: str) -> str:
         legal_tokens = {
@@ -807,6 +973,114 @@ class DocumentIntelligenceService:
             score -= 2
         return score
 
+    def _extract_ranked_provider_from_header(self, raw_text: str, company: dict[str, str]) -> str:
+        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        candidates: list[tuple[int, str]] = []
+        header_lines = lines[:18]
+
+        for index, line in enumerate(header_lines):
+            compact_line = re.sub(r"[\s.\-]", "", line.upper())
+            matches = re.findall(r"[A-Z]\d{7}[A-Z0-9]|\d{8}[A-Z]", compact_line)
+            tax_ids = [
+                value
+                for value in matches
+                if not company.get("tax_id") or value != company["tax_id"]
+            ]
+            if not tax_ids:
+                continue
+
+            anchored_candidates: list[tuple[int, str]] = []
+            for candidate_line in reversed(header_lines[max(0, index - 5):index]):
+                cleaned = re.sub(r"^\(\d+\)\s*", "", candidate_line).strip(" .,:;-")
+                upper_candidate = cleaned.upper()
+                if not cleaned or self._is_generic_party_candidate(cleaned):
+                    continue
+                if (
+                    re.search(r"SERVI", upper_candidate)
+                    and re.search(r"INFORM|FORMA|MORN", upper_candidate)
+                    and not re.search(r"\b(SL|S\.L\.|SA|S\.A\.|SLU|S\.L\.U\.)\b", upper_candidate)
+                ):
+                    continue
+                if self._matches_company_context(cleaned, "", company):
+                    continue
+                if self._looks_like_address_or_contact_line(cleaned):
+                    continue
+                if re.search(r",\s*\d{1,4}\b", cleaned) or re.search(r"\b\d{5}\b", upper_candidate):
+                    continue
+                if not self._normalize_party_name(cleaned):
+                    continue
+                candidate_score = self._party_candidate_score(cleaned, tax_ids[0])
+                if re.search(r"\b(SL|S\.L\.|SA|S\.A\.|SLU|S\.L\.U\.)\b", upper_candidate):
+                    candidate_score += 2
+                elif len(cleaned.split()) <= 2:
+                    candidate_score -= 2
+                if "," in cleaned and not re.search(r"\d", cleaned):
+                    candidate_score += 1
+                anchored_candidates.append((candidate_score, cleaned))
+
+            if anchored_candidates:
+                anchored_candidates.sort(key=lambda item: (item[0], len(item[1])), reverse=True)
+                best_score, best_name = anchored_candidates[0]
+                if best_score >= 3:
+                    return best_name
+
+        for index, line in enumerate(header_lines):
+            upper_line = line.upper()
+            if "CLIENTE:" in upper_line:
+                break
+            if self._matches_company_context(line, "", company):
+                continue
+            if any(token in upper_line for token in ("FACTURA", "DOCUMENTO", "FECHA", "NIF", "CIF", "DOMICILIO")):
+                continue
+            if self._looks_like_address_or_contact_line(line):
+                continue
+
+            cleaned = re.sub(r"^\(\d+\)\s*", "", line).strip(" .,:;-")
+            if not cleaned or self._is_generic_party_candidate(cleaned):
+                continue
+            if (
+                re.search(r"SERVI", cleaned.upper())
+                and re.search(r"INFORM|FORMA|MORN", cleaned.upper())
+                and not re.search(r"\b(SL|S\.L\.|SA|S\.A\.|SLU|S\.L\.U\.)\b", cleaned.upper())
+            ):
+                continue
+            if re.search(r",\s*\d{1,4}\b", cleaned) or re.search(r"\b\d{5}\b", upper_line):
+                continue
+            if self._matches_company_context(cleaned, "", company):
+                continue
+            if not self._normalize_party_name(cleaned):
+                continue
+
+            nearby_tax_id = ""
+            for candidate_line in lines[index:index + 4]:
+                compact_line = re.sub(r"[\s.\-]", "", candidate_line.upper())
+                matches = re.findall(r"[A-Z]\d{7}[A-Z0-9]|\d{8}[A-Z]", compact_line)
+                for candidate_tax_id in matches:
+                    if company.get("tax_id") and candidate_tax_id == company["tax_id"]:
+                        continue
+                    nearby_tax_id = candidate_tax_id
+                    break
+                if nearby_tax_id:
+                    break
+
+            candidate_score = self._party_candidate_score(cleaned, nearby_tax_id)
+            upper_cleaned = cleaned.upper()
+            if re.search(r"\b(SL|S\.L\.|SA|S\.A\.|SLU|S\.L\.U\.)\b", upper_cleaned):
+                candidate_score += 2
+            elif len(cleaned.split()) <= 2:
+                candidate_score -= 2
+            if "," in cleaned and not re.search(r"\d", cleaned):
+                candidate_score += 1
+            candidates.append((candidate_score, cleaned))
+
+        if candidates:
+            candidates.sort(key=lambda item: (item[0], len(item[1])), reverse=True)
+            best_score, best_name = candidates[0]
+            if best_score >= 3:
+                return best_name
+
+        return self._extract_provider_from_header(raw_text, company)
+
     def _is_generic_party_candidate(self, value: str) -> bool:
         normalized = re.sub(r"\s+", " ", (value or "").strip()).upper()
         if not normalized:
@@ -892,7 +1166,7 @@ class DocumentIntelligenceService:
             "description": "",
         }
 
-        result["supplier_name"] = self._extract_provider_from_header(raw_text, company)
+        result["supplier_name"] = self._extract_ranked_provider_from_header(raw_text, company)
 
         for line in lines[:18]:
             if "NIF" not in line.upper() and "CIF" not in line.upper():
@@ -929,6 +1203,29 @@ class DocumentIntelligenceService:
                     result["description"] = cleaned
                     break
 
+        if not result["description"]:
+            trigger_index = next(
+                (
+                    index
+                    for index, line in enumerate(upper_lines)
+                    if "CAUSA RECT" in line or line == "CONCEPTO"
+                ),
+                -1,
+            )
+            if trigger_index >= 0:
+                for candidate in lines[trigger_index + 1:trigger_index + 8]:
+                    cleaned = re.sub(r"\s+", " ", candidate).strip(" .,:;-")
+                    upper_candidate = cleaned.upper()
+                    if not cleaned or cleaned.startswith("-") or re.fullmatch(r"-?[\d.,]+", cleaned):
+                        continue
+                    if any(token in upper_candidate for token in ("SUBTOTAL", "IMPUEST", "TOTAL", "DOCUMENTO", "FECHA", "RECTIFICA", "NIF", "CIF")):
+                        continue
+                    if self._looks_like_address_or_contact_line(cleaned):
+                        continue
+                    if len(cleaned) >= 10:
+                        result["description"] = cleaned
+                        break
+
         def signed_amount_for_label(label: str) -> float:
             for index in range(len(upper_lines) - 1, -1, -1):
                 upper_line = upper_lines[index]
@@ -952,6 +1249,15 @@ class DocumentIntelligenceService:
         result["base"] = signed_amount_for_label("SUBTOTAL")
         result["tax_amount"] = signed_amount_for_label("IMPUESTOS")
         result["total"] = signed_amount_for_label("TOTAL")
+
+        if result["base"] != 0 and result["total"] != 0:
+            inferred_tax = round(result["total"] - result["base"], 2)
+            if inferred_tax != 0 and (
+                result["tax_amount"] == 0
+                or abs(abs(result["tax_amount"]) - abs(inferred_tax)) > 0.05
+            ):
+                result["tax_amount"] = inferred_tax
+
         rate_match = re.search(r"(\d{1,2}(?:[.,]\d{1,2})?)\s*%[^\n]*IMPUESTOS", raw_text, re.IGNORECASE)
         if rate_match:
             result["tax_rate"] = float(rate_match.group(1).replace(",", "."))
@@ -959,6 +1265,12 @@ class DocumentIntelligenceService:
             result["tax_rate"] = 7.0
         elif result["base"] and result["tax_amount"]:
             result["tax_rate"] = round(abs(result["tax_amount"] / result["base"]) * 100, 2)
+
+        if result["base"] and result["tax_amount"]:
+            inferred_rate = round(abs(result["tax_amount"] / result["base"]) * 100, 2)
+            if result["tax_rate"] <= 0 or result["tax_rate"] > 35 or abs(result["tax_rate"] - inferred_rate) > 0.5:
+                if inferred_rate <= 35:
+                    result["tax_rate"] = inferred_rate
 
         return result
 

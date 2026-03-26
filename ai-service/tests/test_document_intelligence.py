@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from app.models.document_bundle import DocumentBundle
+from app.models.document_bundle import DocumentBundle, DocumentPageBundle
 from app.models.invoice_model import InvoiceData, LineItem
 from app.services.document_intelligence import DocumentIntelligenceService
 
@@ -882,3 +882,72 @@ class TestDocumentIntelligenceService:
         import asyncio
 
         asyncio.run(run())
+
+    def test_should_run_region_hint_rescue_for_scanned_document_without_company_match(self):
+        service = DocumentIntelligenceService()
+
+        should_rescue = service._should_run_region_hint_rescue(
+            base_candidate=InvoiceData(
+                proveedor="Texto OCR roto que no parece una empresa real y ocupa demasiado espacio en la cabecera",
+                cliente="",
+                cif_proveedor="",
+                cif_cliente="",
+            ),
+            input_profile={"input_kind": "pdf_scanned"},
+            company_context={
+                "name": "Disoft Servicios Informaticos SL",
+                "tax_id": "B35222249",
+            },
+        )
+
+        assert should_rescue is True
+
+    def test_maybe_apply_region_hint_rescue_enriches_bundle_and_raw_text(self):
+        service = DocumentIntelligenceService()
+        bundle = DocumentBundle(
+            raw_text="RECTIFICATIVA",
+            page_count=1,
+            page_texts=["RECTIFICATIVA"],
+            pages=[
+                DocumentPageBundle(
+                    page_number=1,
+                    reading_text="RECTIFICATIVA",
+                    ocr_text="RECTIFICATIVA",
+                    spans=[],
+                )
+            ],
+        )
+
+        with patch(
+            "app.services.ocr_service.OCRService.extract_region_hints",
+            return_value=[
+                {
+                    "page_number": 1,
+                    "region_type": "header_left",
+                    "text": "(9747) FLORBRIC, S. L.\nNIF: B76099134",
+                    "bbox": {"x0": 0, "y0": 0, "x1": 400, "y1": 250},
+                },
+                {
+                    "page_number": 1,
+                    "region_type": "totals",
+                    "text": "SUBTOTAL -25,00\nIMPUESTOS -1,75\nTOTAL -26,75",
+                    "bbox": {"x0": 400, "y0": 700, "x1": 800, "y1": 1100},
+                },
+            ],
+        ):
+            rescued_bundle, rescued_raw_text, applied = service._maybe_apply_region_hint_rescue(
+                file_path="invoice.pdf",
+                input_profile={"input_kind": "pdf_scanned"},
+                company_context={
+                    "name": "Disoft Servicios Informaticos SL",
+                    "tax_id": "B35222249",
+                },
+                bundle=bundle,
+                raw_text=bundle.raw_text,
+                base_candidate=InvoiceData(proveedor="", cliente="", cif_proveedor="", cif_cliente=""),
+            )
+
+        assert applied is True
+        assert "FLORBRIC" in rescued_raw_text
+        assert any(region.region_type == "totals" for region in rescued_bundle.regions)
+        assert any(span.source == "ocr_region" for span in rescued_bundle.spans)
