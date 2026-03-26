@@ -352,7 +352,7 @@ async function claimNextPendingJob(workerId) {
   }
 }
 
-async function requeueStaleJobs(cutoffDate) {
+async function requeueStaleJobs(cutoffDate, { facturaId = null, maxRecoveries = 2 } = {}) {
   const client = await db.getClient();
 
   try {
@@ -360,27 +360,62 @@ async function requeueStaleJobs(cutoffDate) {
 
     const staleJobsResult = await client.query(
       `UPDATE processing_jobs
-       SET estado = 'PENDIENTE',
-           started_at = NULL,
-           finished_at = NULL,
-           worker_id = NULL,
+       SET estado = CASE
+             WHEN retry_count + 1 >= $3 THEN 'ERROR'
+             ELSE 'PENDIENTE'
+           END,
+           started_at = CASE
+             WHEN retry_count + 1 >= $3 THEN started_at
+             ELSE NULL
+           END,
+           finished_at = CASE
+             WHEN retry_count + 1 >= $3 THEN NOW()
+             ELSE NULL
+           END,
+           worker_id = CASE
+             WHEN retry_count + 1 >= $3 THEN worker_id
+             ELSE NULL
+           END,
            retry_count = retry_count + 1,
-           error_message = COALESCE(error_message, 'Job recuperado tras reinicio del worker')
+           error_message = CASE
+             WHEN retry_count + 1 >= $3 THEN
+               CONCAT_WS(' | ', NULLIF(error_message, ''), 'Job marcado como error tras multiples recuperaciones automaticas')
+             ELSE
+               CONCAT_WS(' | ', NULLIF(error_message, ''), 'Job reencolado automaticamente tras quedar atascado')
+           END
        WHERE estado = 'EN_PROCESO'
          AND started_at IS NOT NULL
          AND started_at < $1
+         AND ($2::int IS NULL OR factura_id = $2)
        RETURNING *`,
-      [cutoffDate]
+      [cutoffDate, facturaId, maxRecoveries]
     );
 
-    const facturaIds = staleJobsResult.rows.map((job) => job.factura_id);
+    const pendingFacturaIds = staleJobsResult.rows
+      .filter((job) => job.estado === 'PENDIENTE')
+      .map((job) => job.factura_id);
+    const errorFacturaIds = staleJobsResult.rows
+      .filter((job) => job.estado === 'ERROR')
+      .map((job) => job.factura_id);
 
-    if (facturaIds.length > 0) {
+    if (pendingFacturaIds.length > 0) {
       await client.query(
         `UPDATE facturas
-         SET estado = 'SUBIDA'
-         WHERE id = ANY($1::int[])`,
-        [facturaIds]
+         SET estado = 'SUBIDA',
+             fecha_procesado = NULL
+         WHERE id = ANY($1::int[])
+           AND estado = 'EN_PROCESO'`,
+        [pendingFacturaIds]
+      );
+    }
+
+    if (errorFacturaIds.length > 0) {
+      await client.query(
+        `UPDATE facturas
+         SET estado = 'ERROR_PROCESAMIENTO'
+         WHERE id = ANY($1::int[])
+           AND estado = 'EN_PROCESO'`,
+        [errorFacturaIds]
       );
     }
 

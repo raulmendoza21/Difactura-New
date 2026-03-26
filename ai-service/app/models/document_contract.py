@@ -63,11 +63,14 @@ class DocumentMeta(BaseModel):
     advisory_id: int | None = None
     company_id: int | None = None
     source_channel: SourceChannel = "web"
+    input_kind: str = ""
+    text_source: str = ""
     file_name: str = ""
     mime_type: str = ""
     page_count: int = Field(default=0, ge=0)
     language: str = ""
     ocr_engine: str = ""
+    preprocessing_steps: list[str] = Field(default_factory=list)
     extraction_provider: str = ""
     extraction_method: str = ""
     extraction_confidence: float = Field(default=0, ge=0, le=1)
@@ -280,45 +283,54 @@ def build_normalized_document_from_invoice_data(
     invoice: InvoiceData,
     *,
     source_channel: SourceChannel = "web",
+    input_kind: str = "",
+    text_source: str = "",
     file_name: str = "",
     mime_type: str = "",
+    page_count: int = 0,
+    ocr_engine: str = "",
+    preprocessing_steps: list[str] | None = None,
     extraction_provider: str = "",
     extraction_method: str = "",
     document_type: DocumentType = "desconocido",
     tax_regime: TaxRegime = "UNKNOWN",
+    due_date: str = "",
+    payment_method: str = "",
+    iban: str = "",
     warnings: list[str] | None = None,
     raw_text_excerpt: str = "",
 ) -> NormalizedInvoiceDocument:
-    tax_breakdown: list[TaxBreakdownItem] = []
-    if invoice.base_imponible or invoice.iva or invoice.iva_porcentaje:
-        tax_breakdown = [
-            TaxBreakdownItem(
-                tax_regime=tax_regime,
-                tax_code="general" if invoice.iva_porcentaje else "",
-                rate=invoice.iva_porcentaje,
-                taxable_base=invoice.base_imponible,
-                tax_amount=invoice.iva,
-            )
-        ]
+    withholding_total = round(max(0, invoice.retencion or 0), 2)
+    subtotal = invoice.base_imponible
+    if subtotal == 0 and invoice.lineas:
+        subtotal = round(sum(line.importe for line in invoice.lineas if line.importe), 2)
+    if subtotal == 0 and invoice.total != 0:
+        subtotal = round(invoice.total + withholding_total - invoice.iva, 2)
 
-    line_items = [
-        NormalizedLineItem(
-            line_no=index + 1,
-            description=line.descripcion,
-            quantity=line.cantidad,
-            unit_price=line.precio_unitario,
-            line_base=line.importe,
-            line_total=line.importe,
-            confidence=invoice.confianza,
-        )
-        for index, line in enumerate(invoice.lineas)
-    ]
+    tax_breakdown = _build_tax_breakdown(
+        subtotal=subtotal,
+        tax_amount=invoice.iva,
+        tax_rate=invoice.iva_porcentaje,
+        total=invoice.total,
+        tax_regime=tax_regime,
+    )
+
+    line_items = _build_normalized_line_items(
+        invoice=invoice,
+        subtotal=subtotal,
+        tax_regime=tax_regime,
+    )
 
     return NormalizedInvoiceDocument(
         document_meta=DocumentMeta(
             source_channel=source_channel,
+            input_kind=input_kind,
+            text_source=text_source,
             file_name=file_name,
             mime_type=mime_type,
+            page_count=page_count,
+            ocr_engine=ocr_engine,
+            preprocessing_steps=preprocessing_steps or [],
             extraction_provider=extraction_provider,
             extraction_method=extraction_method,
             extraction_confidence=invoice.confianza,
@@ -329,10 +341,14 @@ def build_normalized_document_from_invoice_data(
             document_type=document_type,
             invoice_side=_infer_invoice_side(invoice),
             operation_kind=_infer_operation_kind(invoice),
+            is_rectificative=document_type in {"factura_rectificativa", "abono"},
+            is_simplified=document_type in {"factura_simplificada", "ticket"},
         ),
         identity=InvoiceIdentity(
             invoice_number=invoice.numero_factura,
             issue_date=invoice.fecha,
+            due_date=due_date,
+            rectified_invoice_number=invoice.rectified_invoice_number,
         ),
         issuer=PartyData(
             name=invoice.proveedor,
@@ -345,11 +361,120 @@ def build_normalized_document_from_invoice_data(
             tax_id=invoice.cif_cliente,
         ),
         totals=MonetaryTotals(
-            subtotal=invoice.base_imponible,
+            subtotal=subtotal,
             tax_total=invoice.iva,
+            withholding_total=withholding_total,
             total=invoice.total,
             amount_due=invoice.total,
         ),
         tax_breakdown=tax_breakdown,
+        withholdings=(
+            [
+                WithholdingBreakdownItem(
+                    withholding_type="IRPF",
+                    rate=invoice.retencion_porcentaje,
+                    taxable_base=subtotal,
+                    amount=withholding_total,
+                )
+            ]
+            if withholding_total > 0
+            else []
+        ),
         line_items=line_items,
+        payment_info=PaymentInfo(
+            payment_method=payment_method,
+            iban=iban,
+        ),
     )
+
+
+def _build_tax_breakdown(
+    *,
+    subtotal: float,
+    tax_amount: float,
+    tax_rate: float,
+    total: float,
+    tax_regime: TaxRegime,
+) -> list[TaxBreakdownItem]:
+    if subtotal == 0 and tax_amount == 0 and total == 0:
+        return []
+
+    is_exempt = tax_regime == "EXEMPT"
+    is_not_subject = tax_regime == "NOT_SUBJECT"
+    reverse_charge = tax_regime == "REVERSE_CHARGE"
+
+    effective_base = subtotal
+    if effective_base == 0 and total != 0 and (is_exempt or is_not_subject or reverse_charge):
+        effective_base = total
+
+    tax_code = ""
+    if tax_rate > 0:
+        tax_code = "general"
+    elif is_exempt:
+        tax_code = "exempt"
+    elif is_not_subject:
+        tax_code = "not_subject"
+    elif reverse_charge:
+        tax_code = "reverse_charge"
+
+    return [
+        TaxBreakdownItem(
+            tax_regime=tax_regime,
+            tax_code=tax_code,
+            rate=tax_rate,
+            taxable_base=effective_base,
+            tax_amount=tax_amount,
+            is_exempt=is_exempt,
+            is_not_subject=is_not_subject,
+            reverse_charge=reverse_charge,
+        )
+    ]
+
+
+def _build_normalized_line_items(
+    *,
+    invoice: InvoiceData,
+    subtotal: float,
+    tax_regime: TaxRegime,
+) -> list[NormalizedLineItem]:
+    if not invoice.lineas:
+        return []
+
+    line_sum = round(sum(line.importe for line in invoice.lineas if line.importe), 2)
+    can_allocate_tax = (
+        invoice.iva != 0
+        and invoice.iva_porcentaje >= 0
+        and line_sum != 0
+        and subtotal != 0
+        and abs(line_sum - subtotal) <= max(0.02, abs(subtotal) * 0.03)
+    )
+
+    normalized_items: list[NormalizedLineItem] = []
+    allocated_tax_total = 0.0
+    for index, line in enumerate(invoice.lineas):
+        line_base = line.importe or round(line.cantidad * line.precio_unitario, 2)
+        line_tax = 0.0
+        if can_allocate_tax and line_base != 0:
+            if index == len(invoice.lineas) - 1:
+                line_tax = round(invoice.iva - allocated_tax_total, 2)
+            else:
+                line_tax = round(invoice.iva * (line_base / line_sum), 2)
+                allocated_tax_total = round(allocated_tax_total + line_tax, 2)
+
+        normalized_items.append(
+            NormalizedLineItem(
+                line_no=index + 1,
+                description=line.descripcion,
+                quantity=line.cantidad,
+                unit_price=line.precio_unitario,
+                line_base=line_base,
+                tax_regime=tax_regime if can_allocate_tax else "UNKNOWN",
+                tax_code="general" if can_allocate_tax and invoice.iva_porcentaje > 0 else "",
+                tax_rate=invoice.iva_porcentaje if can_allocate_tax else 0,
+                tax_amount=line_tax,
+                line_total=round(line_base + line_tax, 2) if can_allocate_tax else line_base,
+                confidence=invoice.confianza,
+            )
+        )
+
+    return normalized_items

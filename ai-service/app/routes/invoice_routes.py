@@ -36,6 +36,8 @@ def _has_extracted_content(data) -> bool:
 async def process_invoice(
     file: UploadFile = File(...),
     mime_type: str = Form("application/pdf"),
+    company_name: str = Form(""),
+    company_tax_id: str = Form(""),
 ):
     """Process an uploaded invoice file and extract structured data."""
     ext = os.path.splitext(file.filename or "")[1].lower()
@@ -63,6 +65,10 @@ async def process_invoice(
             file_path=tmp_path,
             filename=file.filename or "",
             mime_type=mime_type,
+            company_context={
+                "name": company_name,
+                "tax_id": company_tax_id,
+            },
         )
         raw_text = result["raw_text"]
         data = result["data"]
@@ -83,6 +89,8 @@ async def process_invoice(
         return {
             "success": result["success"],
             **data.model_dump(),
+            "document_input": result["document_input"],
+            "field_confidence": result["field_confidence"],
             "normalized_document": result["normalized_document"].model_dump(),
             "coverage": result["coverage"].model_dump(),
             "raw_text": raw_text,
@@ -107,6 +115,13 @@ async def process_invoice(
 async def extract_invoice(
     file: UploadFile = File(...),
     mime_type: str = Form("application/pdf"),
+    company_name: str = Form(""),
+    company_tax_id: str = Form(""),
 ):
     """Document-to-JSON endpoint with provider metadata."""
-    return await process_invoice(file=file, mime_type=mime_type)
+    return await process_invoice(
+        file=file,
+        mime_type=mime_type,
+        company_name=company_name,
+        company_tax_id=company_tax_id,
+    )

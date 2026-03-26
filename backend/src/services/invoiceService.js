@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const processingConfig = require('../config/processing');
 const invoiceRepo = require('../repositories/invoiceRepository');
 const auditService = require('./auditService');
 const supplierService = require('./supplierService');
@@ -133,8 +134,37 @@ async function getById(id) {
   const lineas = await invoiceRepo.findLines(id);
   const documento = await invoiceRepo.findDocument(id);
   const job = await invoiceRepo.findJobByFactura(id);
+  const latestExtraction = await auditService.getLatestByFacturaAndAction(id, 'PROCESADA_IA');
 
-  return { ...factura, lineas, documento, job };
+  const extraction = latestExtraction?.detalle_json
+    ? {
+        provider: latestExtraction.detalle_json.provider || null,
+        method: latestExtraction.detalle_json.method || null,
+        tipo_factura: latestExtraction.detalle_json.tipo_factura || null,
+        confianza: latestExtraction.detalle_json.confianza ?? null,
+        warnings: latestExtraction.detalle_json.warnings || [],
+        document_input: latestExtraction.detalle_json.document_input || null,
+        coverage: latestExtraction.detalle_json.coverage || null,
+        field_confidence: latestExtraction.detalle_json.field_confidence || {},
+        normalized_document: latestExtraction.detalle_json.normalized_document || null,
+        created_at: latestExtraction.created_at,
+      }
+    : null;
+
+  return {
+    ...factura,
+    empresa_asociada: factura.cliente_id
+      ? {
+          id: factura.cliente_id,
+          nombre: factura.cliente_nombre,
+          cif: factura.cliente_cif,
+        }
+      : null,
+    lineas,
+    documento,
+    job,
+    extraction,
+  };
 }
 
 async function getDocumentFile(documentId) {
@@ -195,6 +225,12 @@ async function reprocess(id, userId, ip) {
   if (!factura) {
     throw new NotFoundError('Factura no encontrada');
   }
+
+  const staleCutoffDate = new Date(Date.now() - processingConfig.jobStaleMs);
+  await invoiceRepo.requeueStaleJobs(staleCutoffDate, {
+    facturaId: id,
+    maxRecoveries: processingConfig.maxRecoveries,
+  });
 
   const latestJob = await invoiceRepo.findJobByFactura(id);
   if (latestJob && [JOB_STATES.PENDIENTE, JOB_STATES.EN_PROCESO].includes(latestJob.estado)) {

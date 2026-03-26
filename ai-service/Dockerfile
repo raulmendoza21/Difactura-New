@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr-spa \
     libgl1 \
     libglib2.0-0 \
+    libgomp1 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 

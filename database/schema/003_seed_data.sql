@@ -36,8 +36,6 @@ INSERT INTO proveedores (nombre, nombre_normalizado, cif, direccion, email, tele
 ('Tecnologia Avanzada S.A.', 'TECNOLOGIA AVANZADA', 'A87654321', 'Av. de la Industria 5, Barcelona', 'contacto@tecavanzada.com', '934567890'),
 ('Servicios Profesionales Lopez', 'SERVICIOS PROFESIONALES LOPEZ', 'B11223344', 'Plaza Espana 3, Valencia', 'admin@splopez.es', '963456789');
 
--- Empresas cliente de ejemplo
+-- Empresa cliente base
 INSERT INTO clientes (asesoria_id, nombre, nombre_normalizado, cif, direccion, email, telefono, estado) VALUES
-(1, 'Distribuciones Martinez S.L.', 'DISTRIBUCIONES MARTINEZ', 'B99887766', 'Calle Comercio 15, Sevilla', 'pedidos@dmartinez.es', '954321098', 'ACTIVA'),
-(1, 'Hosteleria del Sur S.A.', 'HOSTELERIA DEL SUR', 'A55443322', 'Av. Andalucia 22, Malaga', 'reservas@hostelsur.com', '952345678', 'ACTIVA'),
-(1, 'Construcciones Acosta S.L.', 'CONSTRUCCIONES ACOSTA', 'B33445566', 'Poligono La Vega 7, Las Palmas', 'facturas@acosta.es', '928123456', 'ACTIVA');
+(1, 'Disoft Servicios Informaticos SL', 'DISOFT SERVICIOS INFORMATICOS', 'B35222249', 'C/ Federico Viera, 163, 35012 Las Palmas de Gran Canaria', 'administracion@disoftweb.com', '928470347', 'ACTIVA');

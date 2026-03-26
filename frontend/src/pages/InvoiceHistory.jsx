@@ -31,8 +31,8 @@ const SORT_OPTIONS = [
   { value: 'fecha_procesado', label: 'Fecha de procesado' },
   { value: 'fecha_factura', label: 'Fecha de factura' },
   { value: 'total', label: 'Total' },
-  { value: 'proveedor', label: 'Proveedor' },
-  { value: 'cliente', label: 'Empresa cliente' },
+  { value: 'proveedor', label: 'Contraparte' },
+  { value: 'cliente', label: 'Empresa asociada' },
   { value: 'fecha_subida', label: 'Fecha de subida' },
 ];
 
@@ -406,7 +406,7 @@ export default function InvoiceHistory() {
             </div>
           </div>
 
-          <div className="relative z-0 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <div className="relative z-0 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
             {FILTERS.map((filter) => {
               const isActive = selectedFilter === filter.key;
               const count =
@@ -458,7 +458,7 @@ export default function InvoiceHistory() {
                   </span>
                   <input
                     className="input-field"
-                    placeholder="Numero, proveedor, empresa, archivo..."
+                    placeholder="Numero, contraparte, empresa asociada, archivo..."
                     value={operationalFilters.search}
                     onChange={(event) => handleOperationalFilterChange('search', event.target.value)}
                   />
@@ -466,7 +466,7 @@ export default function InvoiceHistory() {
 
                 <label className="space-y-1">
                   <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Empresa cliente
+                    Empresa asociada
                   </span>
                   <select
                     className="input-field"

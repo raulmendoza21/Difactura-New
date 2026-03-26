@@ -3,11 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import StatusPanel from '../components/common/StatusPanel';
 import InvoiceDetailCard from '../components/invoices/InvoiceDetailCard';
+import ExtractionInsights from '../components/invoices/ExtractionInsights';
+import FieldConfidenceHint, { getFieldInputClass } from '../components/invoices/FieldConfidenceHint';
 import InvoiceLineItems from '../components/invoices/InvoiceLineItems';
 import InvoicePreview from '../components/invoices/InvoicePreview';
 import ReviewWarnings from '../components/invoices/ReviewWarnings';
 import { getInvoiceById, rejectInvoice, reprocessInvoice, updateInvoice, validateInvoice } from '../services/invoiceService';
 import { formatCurrency } from '../utils/formatters';
+import { getTaxIdLabel, getTaxLabel } from '../utils/invoicePresentation';
 import { INVOICE_STATES } from '../utils/constants';
 
 const ACTIVE_PROCESSING_STATES = new Set([INVOICE_STATES.SUBIDA, INVOICE_STATES.EN_PROCESO]);
@@ -120,6 +123,20 @@ function formatRefreshTime(value) {
   }).format(value);
 }
 
+function getExtractionFieldConfidence(invoice, key) {
+  const value = invoice?.extraction?.field_confidence?.[key];
+  return typeof value === 'number' ? value : null;
+}
+
+function ReviewFieldLabel({ label, confidence }) {
+  return (
+    <span className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+      <span>{label}</span>
+      <FieldConfidenceHint value={confidence} label={label} compact />
+    </span>
+  );
+}
+
 export default function InvoiceReview() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -207,6 +224,17 @@ export default function InvoiceReview() {
   const canReprocess = REPROCESSABLE_STATES.has(invoice?.estado);
   const isProcessing = ACTIVE_PROCESSING_STATES.has(invoice?.estado);
   const refreshLabel = formatRefreshTime(lastRefreshAt);
+  const fieldConfidence = invoice?.extraction?.field_confidence || {};
+  const counterpartyConfidence =
+    invoice?.tipo === 'venta' ? fieldConfidence.cliente : fieldConfidence.proveedor;
+  const counterpartyTaxConfidence =
+    invoice?.tipo === 'venta' ? fieldConfidence.cif_cliente : fieldConfidence.cif_proveedor;
+  const taxLabel = getTaxLabel(invoice);
+  const taxIdLabel = getTaxIdLabel();
+  const withholding = invoice?.extraction?.normalized_document?.withholdings?.[0] || null;
+  const showTechnicalInsights =
+    typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('debug') === '1';
 
   const handleValidate = async () => {
     setActionLoading('validate');
@@ -464,15 +492,11 @@ export default function InvoiceReview() {
           title="Estas corrigiendo los datos extraidos"
           description="Usa el documento original como referencia. Los cambios se guardaran antes de validar."
           items={[
-            'Revisa numero de factura, fecha, proveedor, CIF e importes.',
+            'Revisa numero de factura, fecha, proveedor, NIF/CIF e importes.',
             'Si faltan lineas, puedes anadirlas manualmente.',
           ]}
           compact
         />
-      )}
-
-      {!isProcessing && invoice?.estado !== INVOICE_STATES.ERROR_PROCESAMIENTO && (
-        <ReviewWarnings invoice={invoice} />
       )}
 
       {showReject && (
@@ -504,7 +528,10 @@ export default function InvoiceReview() {
           {!isEditing ? (
             <>
               <InvoiceDetailCard invoice={invoice} />
-              <InvoiceLineItems lines={invoice?.lineas || []} />
+              <InvoiceLineItems
+                lines={invoice?.lineas || []}
+                confidence={getExtractionFieldConfidence(invoice, 'lineas')}
+              />
             </>
           ) : (
             <>
@@ -518,16 +545,16 @@ export default function InvoiceReview() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <label className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Numero</span>
+                    <ReviewFieldLabel label="Numero" confidence={fieldConfidence.numero_factura} />
                     <input
-                      className="input-field"
+                      className={getFieldInputClass(fieldConfidence.numero_factura)}
                       value={draft.numero_factura}
                       onChange={(event) => handleDraftChange('numero_factura', event.target.value)}
                     />
                   </label>
 
                   <label className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tipo</span>
+                    <ReviewFieldLabel label="Tipo" confidence={null} />
                     <select
                       className="input-field"
                       value={draft.tipo}
@@ -539,55 +566,55 @@ export default function InvoiceReview() {
                   </label>
 
                   <label className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Fecha factura</span>
+                    <ReviewFieldLabel label="Fecha factura" confidence={fieldConfidence.fecha} />
                     <input
                       type="date"
-                      className="input-field"
+                      className={getFieldInputClass(fieldConfidence.fecha)}
                       value={draft.fecha}
                       onChange={(event) => handleDraftChange('fecha', event.target.value)}
                     />
                   </label>
 
                   <div className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Fecha procesado</span>
+                    <ReviewFieldLabel label="Fecha procesado" confidence={null} />
                     <div className="input-field bg-slate-50 text-slate-500">
                       {invoice?.fecha_procesado ? invoice.fecha_procesado.slice(0, 10) : '-'}
                     </div>
                   </div>
 
                   <label className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Proveedor</span>
+                    <ReviewFieldLabel label="Contraparte" confidence={counterpartyConfidence} />
                     <input
-                      className="input-field"
+                      className={getFieldInputClass(counterpartyConfidence)}
                       value={draft.proveedor_nombre}
                       onChange={(event) => handleDraftChange('proveedor_nombre', event.target.value)}
                     />
                   </label>
 
                   <label className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">CIF proveedor</span>
+                    <ReviewFieldLabel label={`${taxIdLabel} contraparte`} confidence={counterpartyTaxConfidence} />
                     <input
-                      className="input-field"
+                      className={getFieldInputClass(counterpartyTaxConfidence)}
                       value={draft.proveedor_cif}
                       onChange={(event) => handleDraftChange('proveedor_cif', event.target.value)}
                     />
                   </label>
 
                   <label className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cliente</span>
+                    <ReviewFieldLabel label="Empresa asociada" confidence={null} />
                     <input
-                      className="input-field"
+                      className="input-field bg-slate-50 text-slate-500"
                       value={draft.cliente_nombre}
-                      onChange={(event) => handleDraftChange('cliente_nombre', event.target.value)}
+                      readOnly
                     />
                   </label>
 
                   <label className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">CIF cliente</span>
+                    <ReviewFieldLabel label={`${taxIdLabel} empresa`} confidence={null} />
                     <input
-                      className="input-field"
+                      className="input-field bg-slate-50 text-slate-500"
                       value={draft.cliente_cif}
-                      onChange={(event) => handleDraftChange('cliente_cif', event.target.value)}
+                      readOnly
                     />
                   </label>
                 </div>
@@ -596,9 +623,9 @@ export default function InvoiceReview() {
                   <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Importes</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <label className="space-y-1">
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Base imponible</span>
+                      <ReviewFieldLabel label="Base imponible" confidence={fieldConfidence.base_imponible} />
                       <input
-                        className="input-field"
+                        className={getFieldInputClass(fieldConfidence.base_imponible)}
                         inputMode="decimal"
                         value={draft.base_imponible}
                         onChange={(event) => handleDraftChange('base_imponible', event.target.value)}
@@ -606,9 +633,9 @@ export default function InvoiceReview() {
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">IVA %</span>
+                      <ReviewFieldLabel label={`${taxLabel} %`} confidence={fieldConfidence.iva_porcentaje} />
                       <input
-                        className="input-field"
+                        className={getFieldInputClass(fieldConfidence.iva_porcentaje)}
                         inputMode="decimal"
                         value={draft.iva_porcentaje}
                         onChange={(event) => handleDraftChange('iva_porcentaje', event.target.value)}
@@ -616,9 +643,9 @@ export default function InvoiceReview() {
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">IVA importe</span>
+                      <ReviewFieldLabel label={`${taxLabel} importe`} confidence={fieldConfidence.iva} />
                       <input
-                        className="input-field"
+                        className={getFieldInputClass(fieldConfidence.iva)}
                         inputMode="decimal"
                         value={draft.iva_importe}
                         onChange={(event) => handleDraftChange('iva_importe', event.target.value)}
@@ -626,15 +653,26 @@ export default function InvoiceReview() {
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total</span>
+                      <ReviewFieldLabel label="Total" confidence={fieldConfidence.total} />
                       <input
-                        className="input-field"
+                        className={getFieldInputClass(fieldConfidence.total)}
                         inputMode="decimal"
                         value={draft.total}
                         onChange={(event) => handleDraftChange('total', event.target.value)}
                       />
                     </label>
                   </div>
+
+                  {withholding && (
+                    <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-900">
+                      <div className="font-medium">
+                        {`Retención ${withholding.withholding_type || ''}`.trim()}
+                      </div>
+                      <div className="mt-1 text-amber-800">
+                        {`${Number(withholding.rate || 0).toFixed(2)}% · -${formatCurrency(withholding.amount || 0)}`}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="border-t border-slate-100 pt-5">
@@ -653,7 +691,10 @@ export default function InvoiceReview() {
               <div className="card p-5 space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-base font-semibold text-slate-800">Lineas de factura</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-semibold text-slate-800">Lineas de factura</h3>
+                      <FieldConfidenceHint value={fieldConfidence.lineas} label="Lineas de factura" compact />
+                    </div>
                     <p className="text-sm text-slate-400 mt-1">
                       Puedes ajustar cantidades, precios y subtotales.
                     </p>
@@ -739,6 +780,13 @@ export default function InvoiceReview() {
           <InvoicePreview document={invoice?.documento} />
         </div>
       </div>
+
+      {!isProcessing && invoice?.estado !== INVOICE_STATES.ERROR_PROCESAMIENTO && (
+        <div className="space-y-4">
+          <ReviewWarnings invoice={invoice} />
+          {showTechnicalInsights && <ExtractionInsights extraction={invoice?.extraction} />}
+        </div>
+      )}
     </div>
   );
 }

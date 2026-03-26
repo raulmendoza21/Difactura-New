@@ -10,6 +10,7 @@ class LineItem(BaseModel):
 
 class InvoiceData(BaseModel):
     numero_factura: str = ""
+    rectified_invoice_number: str = ""
     tipo_factura: str = ""
     fecha: str = ""
     proveedor: str = ""
@@ -19,6 +20,8 @@ class InvoiceData(BaseModel):
     base_imponible: float = 0
     iva_porcentaje: float = 0
     iva: float = 0
+    retencion_porcentaje: float = 0
+    retencion: float = 0
     total: float = 0
     confianza: float = Field(default=0, ge=0, le=1)
     lineas: list[LineItem] = []

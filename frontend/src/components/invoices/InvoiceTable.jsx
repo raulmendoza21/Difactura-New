@@ -33,6 +33,20 @@ function getChannelLabel(channel) {
   return DOCUMENT_CHANNEL_LABELS[channel] || channel;
 }
 
+function getCounterpartyName(invoice) {
+  return (
+    invoice.proveedor_nombre ||
+    (invoice.tipo === 'venta'
+      ? invoice.extraction?.normalized_document?.recipient?.name
+      : invoice.extraction?.normalized_document?.issuer?.name) ||
+    '-'
+  );
+}
+
+function getAssociatedCompanyName(invoice) {
+  return invoice.cliente_nombre || invoice.empresa_asociada?.nombre || '-';
+}
+
 export default function InvoiceTable({
   invoices = [],
   scrollable = false,
@@ -58,7 +72,7 @@ export default function InvoiceTable({
           <thead>
             <tr className={`bg-slate-50/80 border-b border-slate-100 ${scrollable ? 'sticky top-0 z-10 backdrop-blur-sm' : ''}`}>
               <th className="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Factura</th>
-              <th className="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Proveedor / Cliente</th>
+              <th className="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Contraparte / Empresa</th>
               <th className="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Cola</th>
               <th className="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Tipo</th>
               <th className="text-right px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Total</th>
@@ -88,9 +102,11 @@ export default function InvoiceTable({
                 </td>
                 <td className="px-5 py-3.5 max-w-[240px]">
                   <div className="space-y-1">
-                    <p className="truncate text-slate-700">{invoice.proveedor_nombre || invoice.cliente_nombre || '-'}</p>
+                    <p className="truncate text-slate-700">{getCounterpartyName(invoice)}</p>
                     <p className="text-xs text-slate-400">
-                      {invoice.cliente_nombre ? `Cliente: ${invoice.cliente_nombre}` : 'Sin cliente asociado'}
+                      {getAssociatedCompanyName(invoice) !== '-'
+                        ? `Empresa asociada: ${getAssociatedCompanyName(invoice)}`
+                        : 'Sin empresa asociada'}
                     </p>
                   </div>
                 </td>
@@ -167,7 +183,12 @@ export default function InvoiceTable({
                   {INVOICE_STATE_LABELS[invoice.estado] || invoice.estado}
                 </span>
               </div>
-              <p className="text-sm text-slate-600 truncate">{invoice.proveedor_nombre || invoice.cliente_nombre || '-'}</p>
+              <p className="text-sm text-slate-600 truncate">{getCounterpartyName(invoice)}</p>
+              <p className="mt-1 text-xs text-slate-400 truncate">
+                {getAssociatedCompanyName(invoice) !== '-'
+                  ? `Empresa asociada: ${getAssociatedCompanyName(invoice)}`
+                  : 'Sin empresa asociada'}
+              </p>
               {invoice.documento?.batch_id && (
                 <p className="mt-1 text-xs text-slate-400">
                   {invoice.documento.batch_id} · {getChannelLabel(invoice.documento.canal_entrada)}

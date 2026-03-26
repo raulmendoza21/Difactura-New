@@ -5,15 +5,17 @@ export default function CompanySelector({
   loading = false,
   variant = 'panel',
 }) {
-  if (variant === 'topbar') {
+  if (variant === 'topbar' || variant === 'topbar-mobile') {
+    const isMobileVariant = variant === 'topbar-mobile';
+
     return (
-      <div className="min-w-[240px] max-w-[360px]">
+      <div className={isMobileVariant ? 'w-full' : 'min-w-[240px] max-w-[360px]'}>
         <label className="block">
-          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+          <span className={`mb-1 block font-semibold uppercase tracking-[0.16em] text-slate-400 ${isMobileVariant ? 'text-[10px]' : 'text-[11px]'}`}>
             Empresa activa
           </span>
           <select
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+            className={`w-full rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 ${isMobileVariant ? 'px-3 py-2 text-sm' : 'px-3 py-2.5 text-sm'}`}
             value={value}
             onChange={onChange}
             disabled={loading || companies.length === 0}

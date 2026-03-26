@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { uploadInvoices } from '../../services/invoiceService';
 import { isValidFileSize, isValidFileType } from '../../utils/validators';
 import InfoPopover from '../common/InfoPopover';
@@ -30,8 +30,17 @@ export default function InvoiceUploader({ company, onUploaded }) {
   const [success, setSuccess] = useState(null);
   const [files, setFiles] = useState([]);
   const [channel, setChannel] = useState('web');
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
   const inputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+
+  const cameraSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
 
   const totalSize = useMemo(
     () => files.reduce((sum, file) => sum + file.size, 0),
@@ -39,6 +48,15 @@ export default function InvoiceUploader({ company, onUploaded }) {
   );
 
   const failedDocuments = success?.documents?.filter((document) => document.status === 'failed') || [];
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+    };
+  }, []);
 
   const addFiles = (incomingFiles, sourceChannel = 'web') => {
     setError('');
@@ -83,6 +101,86 @@ export default function InvoiceUploader({ company, onUploaded }) {
     setFiles((current) =>
       current.filter((file) => `${file.name}-${file.size}-${file.lastModified}` !== fileKeyToRemove)
     );
+  };
+
+  const stopCameraStream = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    setCameraReady(false);
+  };
+
+  const openCamera = async () => {
+    if (!cameraSupported) {
+      cameraInputRef.current?.click();
+      return;
+    }
+
+    setError('');
+    setCameraError('');
+    setCapturedPhoto(null);
+    setCameraOpen(true);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: false,
+      });
+
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraReady(true);
+    } catch (cameraErr) {
+      setCameraError('No se pudo acceder a la camara. Puedes usar el selector de archivos como alternativa.');
+      setCameraReady(false);
+    }
+  };
+
+  const closeCamera = () => {
+    stopCameraStream();
+    setCameraOpen(false);
+    setCapturedPhoto(null);
+    setCameraError('');
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    context.drawImage(video, 0, 0, width, height);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    setCapturedPhoto(dataUrl);
+  };
+
+  const confirmCapturedPhoto = async () => {
+    if (!capturedPhoto) return;
+
+    const response = await fetch(capturedPhoto);
+    const blob = await response.blob();
+    const timestamp = Date.now();
+    const file = new File([blob], `camera-${timestamp}.jpg`, {
+      type: 'image/jpeg',
+      lastModified: timestamp,
+    });
+
+    addFiles([file], 'mobile_camera');
+    closeCamera();
   };
 
   const handleUpload = async () => {
@@ -206,18 +304,18 @@ export default function InvoiceUploader({ company, onUploaded }) {
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className="btn-primary"
+              className="btn-primary justify-center"
               disabled={uploading}
             >
               Seleccionar archivos
             </button>
             <button
               type="button"
-              onClick={() => cameraInputRef.current?.click()}
-              className="btn-secondary"
+              onClick={openCamera}
+              className="btn-secondary justify-center"
               disabled={uploading}
             >
-              Capturar desde movil
+              Abrir camara
             </button>
           </div>
         </div>
@@ -258,7 +356,7 @@ export default function InvoiceUploader({ company, onUploaded }) {
           </div>
 
           {files.length > 0 ? (
-            <ul className="mt-4 max-h-[32rem] space-y-2 overflow-y-auto pr-1">
+            <ul className="mt-4 max-h-[20rem] space-y-2 overflow-y-auto pr-1 sm:max-h-[32rem]">
               {files.map((file) => {
                 const key = `${file.name}-${file.size}-${file.lastModified}`;
                 return (
@@ -290,11 +388,11 @@ export default function InvoiceUploader({ company, onUploaded }) {
             </div>
           )}
 
-          <div className="mt-5 flex justify-end">
+          <div className="mt-5 flex justify-stretch sm:justify-end">
             <button
               type="button"
               onClick={handleUpload}
-              className="btn-primary"
+              className="btn-primary w-full justify-center sm:w-auto"
               disabled={uploading || files.length === 0 || !company?.id}
             >
               Procesar
@@ -302,6 +400,116 @@ export default function InvoiceUploader({ company, onUploaded }) {
           </div>
         </div>
       </div>
+
+      {cameraOpen && (
+        <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                Captura con camara
+              </p>
+              <h3 className="mt-2 text-xl font-bold text-slate-900">
+                Saca una foto y anadela al lote
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                La foto entrara en el mismo flujo de subida. Si no queda bien, puedes repetirla antes de anadirla.
+              </p>
+            </div>
+
+            <button type="button" onClick={closeCamera} className="btn-secondary">
+              Cerrar camara
+            </button>
+          </div>
+
+          {cameraError && (
+            <StatusPanel
+              tone="warning"
+              eyebrow="Camara no disponible"
+              title="No se ha podido abrir la camara"
+              description={cameraError}
+              compact
+            />
+          )}
+
+          <div className="mt-5 grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+            <div className="rounded-[24px] border border-slate-200 bg-slate-950 p-3 shadow-inner">
+              {!capturedPhoto ? (
+                <div className="relative overflow-hidden rounded-[18px] bg-black">
+                  <video
+                    ref={videoRef}
+                    className="aspect-[4/3] w-full object-cover"
+                    playsInline
+                    muted
+                  />
+                  {!cameraReady && (
+                    <div className="absolute inset-0 flex items-center justify-center text-sm font-medium text-white/80">
+                      Preparando camara...
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <img
+                  src={capturedPhoto}
+                  alt="Captura de factura"
+                  className="aspect-[4/3] w-full rounded-[18px] object-cover"
+                />
+              )}
+              <canvas ref={canvasRef} className="hidden" />
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Flujo movil
+              </p>
+              <ul className="mt-3 space-y-2 text-sm text-slate-600">
+                <li>1. Abre la camara desde el navegador.</li>
+                <li>2. Haz la foto con la factura centrada y buena luz.</li>
+                <li>3. Repite si no se lee bien.</li>
+                <li>4. Anadela al lote y procesa como cualquier documento.</li>
+              </ul>
+
+              <div className="mt-5 flex flex-col gap-3">
+                {!capturedPhoto ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={capturePhoto}
+                      className="btn-primary justify-center"
+                      disabled={!cameraReady}
+                    >
+                      Capturar foto
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="btn-secondary justify-center"
+                    >
+                      Usar captura del dispositivo
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={confirmCapturedPhoto}
+                      className="btn-success justify-center"
+                    >
+                      Anadir al lote
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCapturedPhoto(null)}
+                      className="btn-secondary justify-center"
+                    >
+                      Repetir foto
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {success && failedDocuments.length > 0 && (
         <div className="rounded-2xl border border-red-200 bg-red-50/70 p-5 shadow-sm">
@@ -335,7 +543,6 @@ export default function InvoiceUploader({ company, onUploaded }) {
         type="file"
         accept="image/*"
         capture="environment"
-        multiple
         onChange={(event) => onSelect(event, 'mobile_camera')}
         className="hidden"
       />

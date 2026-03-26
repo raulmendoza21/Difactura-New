@@ -1,13 +1,32 @@
 const axios = require('axios');
 const aiConfig = require('../config/aiService');
 
-async function processInvoice(filePath, mimeType) {
+function shouldRetryAiRequest(err) {
+  if (!err) {
+    return false;
+  }
+
+  const message = String(err.message || '').toLowerCase();
+  if (err.code === 'ECONNABORTED' || message.includes('timeout')) {
+    return false;
+  }
+
+  if (err.response) {
+    return err.response.status >= 500;
+  }
+
+  return true;
+}
+
+async function processInvoice(filePath, mimeType, companyContext = {}) {
   const FormData = require('form-data');
   const fs = require('fs');
 
   const form = new FormData();
   form.append('file', fs.createReadStream(filePath));
   form.append('mime_type', mimeType);
+  form.append('company_name', companyContext.name || '');
+  form.append('company_tax_id', companyContext.taxId || '');
 
   let lastError;
   const attempts = 1 + (aiConfig.retries || 0);
@@ -21,9 +40,11 @@ async function processInvoice(filePath, mimeType) {
       return response.data;
     } catch (err) {
       lastError = err;
-      if (attempt < attempts) {
+      const canRetry = attempt < attempts && shouldRetryAiRequest(err);
+
+      if (canRetry) {
         const delay = Math.pow(2, attempt - 1) * 1000;
-        console.warn(`AI service attempt ${attempt}/${attempts} failed: ${err.message}. Retrying in ${delay}ms…`);
+        console.warn(`AI service attempt ${attempt}/${attempts} failed: ${err.message}. Retrying in ${delay}ms...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

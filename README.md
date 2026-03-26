@@ -1,5 +1,9 @@
 # Difactura
 
+Repositorio canonico de trabajo: `C:\Users\raule\Documents\DISOFT-NEW`
+
+Si existe otra copia local como `DISOFT`, esta no es la referencia principal para el desarrollo actual.
+
 Aplicacion web para subir facturas en PDF o imagen, extraer sus datos automaticamente y revisarlos antes de validarlos.
 
 ## Que hace
@@ -33,21 +37,25 @@ Aplicacion web para subir facturas en PDF o imagen, extraer sus datos automatica
 ## Arranque rapido
 
 1. Copia `/.env.example` a `.env` en la raiz si vas a usar el proveedor local de IA.
-2. Levanta el stack base:
+2. Levanta el stack de desarrollo actual:
 
 ```bash
-docker compose up -d db backend ai-service frontend
+docker compose --profile doc-ai-text up -d --build
 ```
 
-3. Si quieres la capa local de estructuracion con Ollama:
+3. Si es la primera vez y falta el modelo local, carga Ollama:
 
 ```bash
-docker compose --profile doc-ai-text up -d ollama-service
 docker compose exec ollama-service ollama pull qwen2.5:3b
-docker compose --profile doc-ai-text up -d ai-service backend frontend
 ```
 
-4. Abre:
+4. Para apagar todo:
+
+```bash
+docker compose --profile doc-ai-text down
+```
+
+5. Abre:
 
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:3000/api/health`

@@ -1,5 +1,5 @@
 from app.models.invoice_model import InvoiceData, LineItem
-from app.models.extraction_result import ExtractionCoverage, ExtractionResult
+from app.models.extraction_result import DocumentInputProfile, ExtractionCoverage, ExtractionResult
 from app.models.document_contract import (
     AccountingProposal,
     AccountingProposalLine,

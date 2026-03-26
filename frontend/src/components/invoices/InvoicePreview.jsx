@@ -63,7 +63,7 @@ export default function InvoicePreview({ document }) {
         <span className="badge bg-slate-100 text-slate-500">{document.nombre_archivo || 'archivo'}</span>
       </div>
 
-      <div className="bg-slate-100 flex items-center justify-center min-h-[300px] lg:min-h-[500px]">
+      <div className="bg-slate-100 flex items-center justify-center min-h-[260px] sm:min-h-[320px] lg:min-h-[500px]">
         {loading && (
           <p className="text-sm text-slate-500">Cargando vista previa...</p>
         )}
@@ -74,9 +74,9 @@ export default function InvoicePreview({ document }) {
 
         {!loading && !error && fileUrl && (
           isPdf ? (
-            <iframe src={fileUrl} className="w-full h-[500px] lg:h-[700px]" title="PDF Preview" />
+            <iframe src={fileUrl} className="w-full h-[360px] sm:h-[500px] lg:h-[700px]" title="PDF Preview" />
           ) : (
-            <img src={fileUrl} alt="Factura" className="max-w-full max-h-[700px] object-contain p-4" />
+            <img src={fileUrl} alt="Factura" className="max-w-full max-h-[420px] object-contain p-3 sm:max-h-[700px] sm:p-4" />
           )
         )}
       </div>

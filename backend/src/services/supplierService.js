@@ -10,15 +10,30 @@ async function findById(id) {
 }
 
 async function findOrCreateByCif(nombre, cif) {
+  const nombreNorm = normalizeName(nombre);
+
   if (cif) {
     const existing = await supplierRepo.findByCif(cif);
-    if (existing) return existing;
+    if (existing) {
+      if (nombreNorm && existing.nombre_normalizado !== nombreNorm) {
+        return supplierRepo.update(existing.id, {
+          nombre,
+          nombre_normalizado: nombreNorm,
+          cif,
+        });
+      }
+      return existing;
+    }
   }
 
-  const nombreNorm = normalizeName(nombre);
   if (nombreNorm) {
     const existing = await supplierRepo.findByNormalizedName(nombreNorm);
-    if (existing) return existing;
+    if (existing) {
+      if (cif && !existing.cif) {
+        return supplierRepo.update(existing.id, { cif });
+      }
+      return existing;
+    }
   }
 
   return supplierRepo.create({

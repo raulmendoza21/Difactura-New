@@ -14,8 +14,12 @@ async function getByFactura(facturaId) {
   return auditRepo.findByFactura(facturaId);
 }
 
+async function getLatestByFacturaAndAction(facturaId, action) {
+  return auditRepo.findLatestByFacturaAndAction(facturaId, action);
+}
+
 async function getRecent(limit) {
   return auditRepo.findRecent(limit);
 }
 
-module.exports = { log, getByFactura, getRecent };
+module.exports = { log, getByFactura, getLatestByFacturaAndAction, getRecent };

@@ -1,0 +1,10 @@
+DISOFT-NEW es el repositorio canonico de trabajo.
+
+Ruta:
+C:\Users\raule\Documents\DISOFT-NEW
+
+Comando recomendado para levantar el stack actual:
+docker compose --profile doc-ai-text up -d --build
+
+Comando recomendado para apagarlo:
+docker compose --profile doc-ai-text down
