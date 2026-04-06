@@ -30,6 +30,7 @@ pnpm-debug.log*
 # Runtime data and local examples
 storage/
 samples/
+artifacts/
 
 # Local LLM caches and keys
 models/huggingface/*

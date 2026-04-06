@@ -163,12 +163,12 @@ export default function Dashboard() {
           subtitle={
             selectedCompanyDetails
               ? 'Pendientes de la empresa activa'
-              : 'Documentos listos para revision humana'
+              : 'Documentos listos para revision'
           }
           color="amber"
           icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
           infoTitle="Pendientes"
-          infoDescription="Documentos ya procesados que esperan una revision humana antes de confirmarse."
+          infoDescription="Documentos ya procesados que esperan revision antes de confirmarse."
           infoItems={[
             'Son el bloque principal de trabajo para la asesoria.',
             'No quedan validados hasta que alguien revise y confirme la factura.',
@@ -194,7 +194,7 @@ export default function Dashboard() {
           subtitle={
             selectedCompanyDetails
               ? 'Errores de la empresa activa'
-              : 'Necesitan reproceso o revision manual'
+              : 'Necesitan reproceso o revision'
           }
           color="red"
           icon="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"

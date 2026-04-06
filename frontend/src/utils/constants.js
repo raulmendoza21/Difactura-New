@@ -12,7 +12,7 @@ export const INVOICE_STATES = {
 export const INVOICE_STATE_LABELS = {
   SUBIDA: 'Subida',
   EN_PROCESO: 'En proceso',
-  PROCESADA_IA: 'Procesada por IA',
+  PROCESADA_IA: 'Procesada automaticamente',
   PENDIENTE_REVISION: 'Pendiente de revision',
   VALIDADA: 'Validada',
   SINCRONIZADA: 'Sincronizada',

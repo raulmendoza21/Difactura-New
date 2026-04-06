@@ -103,7 +103,7 @@ El `ai-service` no deberia exponerse publicamente si no hace falta.
 ## 5.5 `ai-service`
 
 - clasificacion de entrada
-- OCR client
+- cliente del proveedor documental
 - bundle interno
 - generacion de candidatos
 - resolvedor global

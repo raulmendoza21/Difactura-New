@@ -10,7 +10,16 @@ const INPUT_KIND_LABELS = {
 
 const TEXT_SOURCE_LABELS = {
   digital_text: 'texto nativo',
-  ocr: 'OCR',
+  ocr: 'lectura OCR',
+};
+
+const PROVIDER_LABELS = {
+  doc_bundle: 'Motor documental',
+  doc_bundle_doc_ai_fallback: 'Motor documental + via complementaria selectiva',
+  heuristic: 'Motor documental',
+  local: 'Lectura local',
+  mistral: 'Mistral OCR',
+  ollama: 'Via complementaria local',
 };
 
 function formatPercent(value) {
@@ -58,13 +67,13 @@ export default function ExtractionInsights({ extraction }) {
 
   if (provider || inputKind || textSource) {
     const channelBits = [
-      provider ? `Proveedor: ${provider}` : null,
+      provider ? `Motor: ${PROVIDER_LABELS[provider] || provider}` : null,
       inputKind ? `Entrada: ${INPUT_KIND_LABELS[inputKind] || inputKind}` : null,
       textSource ? `Texto base: ${TEXT_SOURCE_LABELS[textSource] || textSource}` : null,
     ].filter(Boolean);
 
     if (channelBits.length) {
-      items.push(channelBits.join(' · '));
+      items.push(channelBits.join(' | '));
     }
   }
 
@@ -78,7 +87,7 @@ export default function ExtractionInsights({ extraction }) {
     .slice(0, 5);
 
   if (lowTechnicalFields.length > 0) {
-    items.push(`Campos con menor fiabilidad tecnica: ${lowTechnicalFields.join(', ')}.`);
+    items.push(`Campos con menor fiabilidad automatica: ${lowTechnicalFields.join(', ')}.`);
   }
 
   if (technicalWarnings.length > 0) {
@@ -102,11 +111,11 @@ export default function ExtractionInsights({ extraction }) {
   return (
     <StatusPanel
       tone={tone}
-      eyebrow="Diagnostico tecnico"
-      title="Contexto de la extraccion automatica"
-      description="Este bloque resume como se ha procesado el documento y que ajustes internos se han aplicado antes de mostrar el resultado final."
+      eyebrow="Procesamiento del documento"
+      title="Contexto de la lectura automatica"
+      description="Este bloque resume como se ha procesado el documento y que ajustes automaticos se han aplicado antes de mostrar el resultado final."
       items={items}
-      footer="Usalo como ayuda tecnica; los avisos de revision de arriba se centran solo en lo que conviene comprobar antes de validar."
+      footer="Usalo como ayuda de revision; los avisos superiores se centran solo en lo que conviene comprobar antes de validar."
       compact
     />
   );

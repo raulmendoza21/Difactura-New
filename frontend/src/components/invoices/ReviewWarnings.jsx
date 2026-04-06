@@ -62,14 +62,14 @@ function buildWarnings(invoice) {
   if (hasWarningGroup(extractionWarnings, 'doc_ai_fallback')) {
     warnings.push({
       tone: 'warning',
-      text: 'La revision automatica necesitó una via complementaria para cerrar la lectura del documento. Conviene revisar los campos clave antes de validar.',
+      text: 'La lectura automatica utilizo una via complementaria selectiva para cerrar la interpretacion del documento. Conviene revisar los campos clave antes de validar.',
     });
   }
 
   if (hasWarningGroup(extractionWarnings, 'doc_ai_fallback_error')) {
     warnings.push({
       tone: 'warning',
-      text: 'La via complementaria no estuvo disponible durante parte del proceso. Se ha mantenido la mejor lectura principal disponible.',
+      text: 'La via complementaria selectiva no estuvo disponible durante parte del proceso. Se ha mantenido la mejor lectura principal disponible.',
     });
   }
 
@@ -197,7 +197,7 @@ export default function ReviewWarnings({ invoice }) {
       tone={tone}
       eyebrow="Comprobaciones sugeridas"
       title="Revisa estos campos antes de validar"
-      description="Estas alertas se generan automaticamente para ayudarte a detectar posibles errores."
+      description="Estas comprobaciones se generan automaticamente para ayudarte a detectar posibles errores."
       items={warnings.map((warning) => warning.text)}
       footer="Si hace falta, puedes corregirlos desde Editar datos."
       compact

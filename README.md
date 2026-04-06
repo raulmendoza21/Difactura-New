@@ -13,16 +13,16 @@ Aplicacion web para subir facturas en PDF o imagen, extraer sus datos automatica
 - Estructura los datos extraidos a JSON.
 - Permite revisar y editar los campos antes de validar.
 - Guarda facturas, lineas, documentos y auditoria en PostgreSQL.
-- Soporta un flujo local con modelo `ollama` para estructuracion sin coste de API.
+- Soporta una via complementaria local con `Ollama` para reforzar casos dudosos sin coste de API.
 
 ## Stack
 
 - Frontend: React + Vite
 - Backend: Node.js + Express
-- Servicio documental: FastAPI + OCR + capa de extraccion
+- Servicio documental: FastAPI + parser documental + resolvedor
 - Base de datos: PostgreSQL
 - Orquestacion local: Docker Compose
-- IA local opcional: Ollama
+- Via complementaria local opcional: Ollama
 
 ## Arquitectura
 
@@ -30,9 +30,42 @@ Aplicacion web para subir facturas en PDF o imagen, extraer sus datos automatica
 - `backend/`: API, negocio y persistencia
 - `ai-service/`: extraccion documental y estructuracion
 - `database/`: esquema y semillas
-- `docs/`: documentacion tecnica
+- `docs/`: documentacion del proyecto
 - `models/`: cache local de modelos, no se sube a Git
 - `storage/`: documentos runtime, no se sube a Git
+
+## Estado actual del stack
+
+Hoy el flujo principal de desarrollo funciona asi:
+
+- `frontend` sirve la interfaz web
+- `backend` orquesta negocio, jobs y persistencia
+- `ai-service` es el motor documental principal
+- `Mistral` actua como parser documental primario
+- `ollama-service` se usa solo como apoyo selectivo de la via complementaria
+
+Notas utiles:
+
+- la configuracion activa vive en `/.env`
+- `llm-service` existe como opcion futura, pero no forma parte del flujo normal actual
+- `storage/` y `artifacts/` son salida local de trabajo, no codigo fuente
+
+## Repo hygiene
+
+Conviene entender estas carpetas asi:
+
+- codigo vivo: `frontend/`, `backend/`, `ai-service/`, `database/`
+- documentacion de trabajo: `docs/`
+- runtime local: `storage/`, `models/`
+- benchmarks y regresiones: `ai-service/benchmarks/`
+- snapshots temporales: `artifacts/`
+
+Regla practica:
+
+- `storage/`, `models/` y `artifacts/` no son codigo fuente
+- los benchmarks si forman parte del producto, porque protegen la generalizacion del motor
+- la configuracion activa vive en `/.env`
+- si `git status` muestra borrados en `artifacts/`, es normal hasta hacer el siguiente commit de limpieza
 
 ## Arranque rapido
 
@@ -59,11 +92,11 @@ docker compose --profile doc-ai-text down
 
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:3000/api/health`
-- AI service: `http://localhost:8000/ai/health`
+- Motor documental: `http://localhost:8000/ai/health`
 
 ## Credenciales de desarrollo
 
-Si recreas la base desde cero, usa los usuarios seed del entorno local definidos en la inicializacion de base de datos o crea los tuyos para desarrollo.
+Si recreas la base desde cero, puedes usar los usuarios demo del seed local o crear tus propios usuarios de desarrollo.
 
 ## Flujo funcional
 
@@ -76,15 +109,14 @@ Si recreas la base desde cero, usa los usuarios seed del entorno local definidos
 
 ## Documentacion
 
-- [Estructura del proyecto](./docs/estructura-proyecto.md)
-- [Extraccion documental con IA](./docs/ia-document-extraction.md)
-- [LLM local gratis](./docs/local-llm-gratis.md)
-- [Entorno Python](./docs/python-env.md)
-- [Esquema de base de datos](./docs/database-schema.md)
+- [Documento maestro del motor](./docs/motor-documental-desacoplado.md)
+- [Contrato de datos documentales y contables](./docs/contrato-datos-documentales-y-contables.md)
+- [API endpoints](./docs/api-endpoints.md)
 - [Despliegue](./docs/deployment.md)
 
 ## Notas
 
 - `samples/`, `storage/` y la cache de modelos no forman parte del repositorio.
-- El proyecto esta preparado para trabajar sin APIs de pago si usas `ollama`.
+- `artifacts/invoice-result-snapshots/` se usa solo para comparativas locales y snapshots temporales.
+- El proyecto esta preparado para trabajar sin APIs de pago si usas `Ollama`.
 - La primera factura puede tardar mas si el modelo local estaba en frio.

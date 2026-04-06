@@ -1,4 +1,4 @@
-"""Difactura AI Service - FastAPI application."""
+"""Difactura document engine - FastAPI application."""
 
 import logging
 from contextlib import asynccontextmanager
@@ -20,14 +20,14 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Difactura AI Service started")
+    logger.info("Difactura document engine started")
     yield
-    logger.info("Difactura AI Service shutting down")
+    logger.info("Difactura document engine shutting down")
 
 
 app = FastAPI(
-    title="Difactura AI Service",
-    description="Servicio de IA para procesamiento de facturas",
+    title="Difactura Motor Documental",
+    description="Servicio del motor documental para procesamiento de facturas",
     version="1.0.0",
     lifespan=lifespan,
 )

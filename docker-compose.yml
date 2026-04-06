@@ -1,5 +1,5 @@
 services:
-  # Base de datos PostgreSQL
+  # Base de datos de desarrollo
   db:
     image: postgres:15-alpine
     container_name: difactura-db
@@ -17,14 +17,14 @@ services:
       - ./database/schema/002_create_indexes.sql:/docker-entrypoint-initdb.d/03-indexes.sql
       - ./database/schema/003_seed_data.sql:/docker-entrypoint-initdb.d/04-seed.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U difactura_user -d difactura"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - difactura-net
 
-  # Backend Node.js (Express)
+  # Backend API
   backend:
     build:
       context: ./backend
@@ -64,7 +64,7 @@ services:
     networks:
       - difactura-net
 
-  # AI Service Python (FastAPI)
+  # Motor documental
   ai-service:
     build:
       context: ./ai-service
@@ -116,7 +116,7 @@ services:
     networks:
       - difactura-net
 
-  # LLM de texto local para estructurar OCR -> JSON
+  # Soporte local para la via complementaria selectiva del motor documental
   ollama-service:
     image: ollama/ollama:latest
     container_name: difactura-ollama
@@ -143,7 +143,7 @@ services:
     profiles:
       - doc-ai-text
 
-  # LLM visual local opcional
+  # Opcion futura de modelo visual local; hoy no forma parte del flujo normal de desarrollo
   llm-service:
     image: vllm/vllm-openai:latest
     container_name: difactura-llm
@@ -185,7 +185,7 @@ services:
     profiles:
       - doc-ai-vlm
 
-  # Frontend React (Vite dev server)
+  # Frontend de desarrollo
   frontend:
     build:
       context: ./frontend
@@ -204,7 +204,7 @@ services:
     networks:
       - difactura-net
 
-  # Nginx (solo produccion)
+  # Proxy solo para produccion
   nginx:
     build:
       context: ./nginx

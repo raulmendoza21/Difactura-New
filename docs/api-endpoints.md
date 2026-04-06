@@ -207,7 +207,7 @@ Compatibilidad temporal:
 
 ## 5.1 Endpoint interno del motor
 
-Mientras el backend siga hablando con el `ai-service` por HTTP interno, la interfaz tecnica del motor queda asi:
+Mientras el backend siga hablando con el `ai-service` por HTTP interno, la interfaz interna del motor queda asi:
 
 ### POST `/ai/process`
 

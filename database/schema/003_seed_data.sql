@@ -6,8 +6,7 @@
 INSERT INTO asesorias (nombre, estado)
 VALUES ('Asesoria Central Demo', 'ACTIVA');
 
--- Usuario administrador
--- Credenciales de ejemplo para entorno local
+-- Usuario administrador demo
 INSERT INTO usuarios (asesoria_id, email, password_hash, nombre, rol, activo)
 VALUES (
     1,
@@ -18,7 +17,7 @@ VALUES (
     TRUE
 );
 
--- Usuario revisor
+-- Usuario revisor demo
 INSERT INTO usuarios (asesoria_id, email, password_hash, nombre, rol, activo)
 VALUES (
     1,

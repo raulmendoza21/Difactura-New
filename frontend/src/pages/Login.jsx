@@ -7,10 +7,10 @@ export default function Login() {
       <div className="w-full max-w-md animate-slide-up">
         <div className="text-center mb-8">
           <img src={logo} alt="Difactura" className="h-14 w-auto mx-auto mb-4 object-contain" />
-          <p className="text-slate-500 text-sm mt-1">Gestión inteligente de facturas</p>
+          <p className="text-slate-500 text-sm mt-1">Gestion inteligente de facturas</p>
         </div>
         <div className="card p-8">
-          <h2 className="text-lg font-semibold text-slate-800 mb-6">Iniciar sesión</h2>
+          <h2 className="text-lg font-semibold text-slate-800 mb-6">Iniciar sesion</h2>
           <LoginForm />
         </div>
         <p className="text-center text-xs text-slate-400 mt-6">Acceso seguro al entorno documental</p>

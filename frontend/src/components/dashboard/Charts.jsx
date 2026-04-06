@@ -41,7 +41,7 @@ export default function Charts({ statsByState = {} }) {
               title="Estado de la bandeja"
               description="Resume como se reparte el trabajo documental dentro del contexto activo."
               items={[
-                'Los estados tecnicos ayudan a detectar cuellos de botella en la cola.',
+                'Los estados del flujo documental ayudan a detectar cuellos de botella en la cola.',
                 'Pendientes y errores son los bloques que conviene atender primero.',
               ]}
               widthClass="w-72"
