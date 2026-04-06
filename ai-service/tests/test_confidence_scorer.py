@@ -100,3 +100,23 @@ def test_confidence_stays_reasonable_for_negative_rectificative():
     )
 
     assert score >= 0.85
+
+
+def test_confidence_drops_for_same_tax_id_on_both_roles():
+    score = confidence_scorer.score(
+        InvoiceData(
+            numero_factura="FAC-5",
+            fecha="2026-03-19",
+            proveedor="Proveedor Demo SL",
+            cif_proveedor="B12345678",
+            cliente="Cliente Demo SL",
+            cif_cliente="B12345678",
+            base_imponible=100,
+            iva_porcentaje=21,
+            iva=21,
+            total=121,
+            lineas=[{"descripcion": "Servicio", "cantidad": 1, "precio_unitario": 100, "importe": 100}],
+        )
+    )
+
+    assert score < 0.8

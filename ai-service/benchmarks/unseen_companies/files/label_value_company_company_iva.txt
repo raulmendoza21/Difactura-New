@@ -1,0 +1,11 @@
+FACTURA
+Numero de factura: FV-2026-001
+Fecha: 15/03/2026
+Proveedor: Soluciones Delta SL
+CIF: B12345678
+Cliente: Beta Consultoria SL
+CIF cliente: B87654321
+Concepto: Servicio mensual de mantenimiento
+Base imponible: 100,00
+IVA 21%: 21,00
+Total: 121,00

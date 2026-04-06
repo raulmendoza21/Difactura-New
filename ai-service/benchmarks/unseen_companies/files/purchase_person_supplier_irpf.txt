@@ -1,0 +1,12 @@
+FACTURA
+Numero: 18/2026
+Fecha: 27/03/2026
+Proveedor: Juan Martin Perez
+NIF proveedor: 43888777H
+Cliente: Beta Tech Advisors SL
+CIF cliente: B99887766
+Concepto: Servicio de consultoria fiscal trimestral
+Base imponible: 1000,00
+IRPF 15%: -150,00
+IVA 21%: 210,00
+Total factura: 1060,00

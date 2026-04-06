@@ -1,0 +1,714 @@
+[
+  {
+    "id": "synthetic_sale_multiline_summary_photo",
+    "family": "sale_visual_summary",
+    "raw_text_file": "files/sale_multiline_summary_photo.txt",
+    "mime_type": "text/plain",
+    "company_context": {
+      "name": "Disoft Servicios Informaticos SL",
+      "tax_id": "B35222249"
+    },
+    "tags": [
+      "synthetic",
+      "modality_photo_mobile",
+      "modality_image_photo",
+      "layout_sparse_visual_summary",
+      "fiscal_igic",
+      "line_multiline"
+    ],
+    "expected": {
+      "numero_factura": "FI202600043",
+      "tipo_factura": "venta",
+      "fecha": "2026-01-07",
+      "proveedor_contains": "DISOFT",
+      "cif_proveedor": "B35222249",
+      "cliente_contains": "ASESORES",
+      "cif_cliente": "J76022912",
+      "base_imponible": 312.85,
+      "iva_porcentaje": 7.0,
+      "iva": 21.9,
+      "total": 334.75,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_sale_person_header_photo",
+    "family": "sale_header_two_columns_person",
+    "raw_text_file": "files/sale_person_header_photo.txt",
+    "mime_type": "text/plain",
+    "company_context": {
+      "name": "Disoft Servicios Informaticos SL",
+      "tax_id": "B35222249"
+    },
+    "tags": [
+      "synthetic",
+      "modality_photo_mobile",
+      "modality_image_photo",
+      "layout_header_two_columns",
+      "party_company_vs_person",
+      "party_single_tax_id_visible",
+      "fiscal_igic"
+    ],
+    "expected": {
+      "numero_factura": "FI202600254",
+      "tipo_factura": "venta",
+      "fecha": "2026-03-11",
+      "proveedor_contains": "DISOFT",
+      "cif_proveedor": "B35222249",
+      "cliente_contains": "CRISTOBAL",
+      "cif_cliente": "43611643D",
+      "base_imponible": 81.0,
+      "iva_porcentaje": 7.0,
+      "iva": 5.67,
+      "total": 86.67,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_purchase_shipping_billing_single",
+    "family": "shipping_billing_purchase",
+    "raw_text_file": "files/purchase_shipping_billing_single.txt",
+    "mime_type": "text/plain",
+    "company_context": {
+      "name": "Disoft Servicios Informaticos SL",
+      "tax_id": "B35222249"
+    },
+    "tags": [
+      "synthetic",
+      "layout_shipping_billing",
+      "layout_footer_supplier",
+      "party_multiple_tax_ids_visible",
+      "party_supplier_only_in_footer",
+      "party_same_company_in_shipping_and_billing",
+      "fiscal_igic",
+      "edge_same_company_in_shipping_and_billing",
+      "edge_supplier_legal_footer_only"
+    ],
+    "expected": {
+      "numero_factura": "GC 26001163",
+      "tipo_factura": "compra",
+      "fecha": "2026-03-06",
+      "proveedor_contains": "ALBERTO VILLACORTA",
+      "cif_proveedor": "B35246388",
+      "cliente_contains": "DISOFT",
+      "cif_cliente": "B35222249",
+      "base_imponible": 25.0,
+      "iva_porcentaje": 7.0,
+      "iva": 1.75,
+      "total": 26.75,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_purchase_shipping_billing_multi_mojibake",
+    "family": "shipping_billing_purchase",
+    "raw_text_file": "files/purchase_shipping_billing_multi_mojibake.txt",
+    "mime_type": "text/plain",
+    "company_context": {
+      "name": "Disoft Servicios Informaticos SL",
+      "tax_id": "B35222249"
+    },
+    "tags": [
+      "synthetic",
+      "layout_shipping_billing",
+      "layout_footer_supplier",
+      "party_multiple_tax_ids_visible",
+      "party_supplier_only_in_footer",
+      "party_same_company_in_shipping_and_billing",
+      "party_invoice_number_looks_like_tax_id",
+      "fiscal_igic",
+      "line_codes_and_serials",
+      "noise_mojibake",
+      "edge_same_company_in_shipping_and_billing",
+      "edge_invoice_number_looks_like_tax_id"
+    ],
+    "expected": {
+      "numero_factura": "GC 26000116",
+      "tipo_factura": "compra",
+      "fecha": "2026-01-09",
+      "proveedor_contains": "ALBERTO VILLACORTA",
+      "cif_proveedor": "B35246388",
+      "cliente_contains": "DISOFT",
+      "cif_cliente": "B35222249",
+      "base_imponible": 150.0,
+      "iva_porcentaje": 7.0,
+      "iva": 10.5,
+      "total": 160.5,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_purchase_irpf_numeric_summary",
+    "family": "purchase_with_irpf",
+    "raw_text_file": "files/purchase_irpf_numeric_summary.txt",
+    "mime_type": "text/plain",
+    "tags": [
+      "synthetic",
+      "fiscal_igic",
+      "fiscal_irpf",
+      "layout_sparse_visual_summary"
+    ],
+    "expected": {
+      "numero_factura": "14/2025",
+      "fecha": "2025-12-21",
+      "base_imponible": 15000.0,
+      "retencion_porcentaje": 15.0,
+      "retencion": 2250.0,
+      "iva_porcentaje": 7.0,
+      "iva": 1050.0,
+      "total": 13800.0
+    }
+  },
+  {
+    "id": "synthetic_rectificative_negative",
+    "family": "rectificativa_negative",
+    "raw_text_file": "files/rectificative_negative.txt",
+    "mime_type": "text/plain",
+    "tags": [
+      "synthetic",
+      "fiscal_rectificative",
+      "fiscal_igic"
+    ],
+    "expected": {
+      "numero_factura": "AB202600002",
+      "fecha": "2026-01-07",
+      "base_imponible": -25.0,
+      "iva_porcentaje": 7.0,
+      "iva": -1.75,
+      "total": -26.75,
+      "document_type": "factura_rectificativa",
+      "rectified_invoice_number": "FI202500122"
+    }
+  },
+  {
+    "id": "synthetic_ticket_supermarket",
+    "family": "ticket_simplified",
+    "raw_text_file": "files/ticket_supermarket.txt",
+    "mime_type": "text/plain",
+    "tags": [
+      "synthetic",
+      "modality_ticket",
+      "layout_ticket_vertical",
+      "fiscal_tax_included"
+    ],
+    "expected": {
+      "numero_factura": "2026/900213-00004245",
+      "proveedor_contains": "DINOSOL",
+      "cif_proveedor": "B61742565",
+      "total": 8.5,
+      "document_type": "factura_simplificada"
+    }
+  },
+  {
+    "id": "synthetic_ticket_restaurant_igic_included",
+    "family": "ticket_tax_breakdown",
+    "raw_text_file": "files/ticket_restaurant_igic_included.txt",
+    "mime_type": "text/plain",
+    "tags": [
+      "synthetic",
+      "modality_ticket",
+      "layout_ticket_vertical",
+      "fiscal_tax_included",
+      "fiscal_igic"
+    ],
+    "expected": {
+      "numero_factura": "T001-1235663",
+      "proveedor_contains": "HOSTELERIA GRESSARA",
+      "cif_proveedor": "B35590736",
+      "base_imponible": 15.98,
+      "iva": 1.12,
+      "total": 17.1,
+      "document_type": "factura_simplificada"
+    }
+  },
+  {
+    "id": "synthetic_label_value_company_company_iva",
+    "family": "label_value_purchase",
+    "raw_text_file": "files/label_value_company_company_iva.txt",
+    "mime_type": "text/plain",
+    "company_context": {
+      "name": "Beta Consultoria SL",
+      "tax_id": "B87654321"
+    },
+    "tags": [
+      "synthetic",
+      "modality_pdf_digital",
+      "layout_label_value",
+      "fiscal_iva"
+    ],
+    "expected": {
+      "numero_factura": "FV-2026-001",
+      "tipo_factura": "compra",
+      "fecha": "2026-03-15",
+      "proveedor_contains": "SOLUCIONES DELTA",
+      "cif_proveedor": "B12345678",
+      "cliente_contains": "BETA CONSULTORIA",
+      "cif_cliente": "B87654321",
+      "base_imponible": 100.0,
+      "iva_porcentaje": 21.0,
+      "iva": 21.0,
+      "total": 121.0,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_multipage_purchase_footer_totals",
+    "family": "multipage_purchase",
+    "raw_text_file": "files/multipage_purchase_footer_totals.txt",
+    "mime_type": "text/plain",
+    "company_context": {
+      "name": "Beta Consultoria SL",
+      "tax_id": "B87654321"
+    },
+    "tags": [
+      "synthetic",
+      "modality_multipage",
+      "layout_label_value",
+      "fiscal_iva",
+      "line_page_break"
+    ],
+    "expected": {
+      "numero_factura": "PR-2026-009",
+      "tipo_factura": "compra",
+      "fecha": "2026-03-18",
+      "proveedor_contains": "SERVICIOS NUBE ATLANTICO",
+      "cif_proveedor": "B44556677",
+      "cliente_contains": "BETA CONSULTORIA",
+      "cif_cliente": "B87654321",
+      "base_imponible": 200.0,
+      "iva_porcentaje": 21.0,
+      "iva": 42.0,
+      "total": 242.0,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_sale_tabular_company_person_igic",
+    "family": "sale_tabular_company_person",
+    "raw_text_file": "files/sale_tabular_company_person_igic.txt",
+    "mime_type": "text/plain",
+    "input_kind": "pdf_digital",
+    "company_context": {
+      "name": "Nova Soluciones Tecnicas SL",
+      "tax_id": "B11223344"
+    },
+    "tags": [
+      "synthetic",
+      "unseen_company",
+      "modality_pdf_digital",
+      "layout_tabular",
+      "party_company_vs_person",
+      "party_single_tax_id_visible",
+      "fiscal_igic",
+      "line_single"
+    ],
+    "expected": {
+      "numero_factura": "FV-2026-088",
+      "tipo_factura": "venta",
+      "fecha": "2026-03-24",
+      "proveedor_contains": "NOVA SOLUCIONES TECNICAS",
+      "cif_proveedor": "B11223344",
+      "cliente_contains": "MARTA SUAREZ DIAZ",
+      "cif_cliente": "78543210K",
+      "base_imponible": 60.0,
+      "iva_porcentaje": 7.0,
+      "iva": 4.2,
+      "total": 64.2,
+      "document_type": "factura_completa",
+      "line_count": 1,
+      "line_total_sum": 60.0,
+      "line_descriptions_contain": [
+        "Configuracion router"
+      ]
+    }
+  },
+  {
+    "id": "synthetic_purchase_label_value_multiple_tax_ids",
+    "family": "label_value_purchase",
+    "raw_text_file": "files/purchase_label_value_multiple_tax_ids.txt",
+    "mime_type": "text/plain",
+    "input_kind": "pdf_digital",
+    "company_context": {
+      "name": "Beta Tech Advisors SL",
+      "tax_id": "B99887766"
+    },
+    "tags": [
+      "synthetic",
+      "unseen_company",
+      "modality_pdf_digital",
+      "layout_label_value",
+      "party_multiple_tax_ids_visible",
+      "fiscal_iva"
+    ],
+    "expected": {
+      "numero_factura": "PR-2026-044",
+      "tipo_factura": "compra",
+      "fecha": "2026-03-20",
+      "proveedor_contains": "SUMINISTROS OFIMATICOS NORTE",
+      "cif_proveedor": "B33445566",
+      "cliente_contains": "BETA TECH ADVISORS",
+      "cif_cliente": "B99887766",
+      "base_imponible": 250.0,
+      "iva_porcentaje": 21.0,
+      "iva": 52.5,
+      "total": 302.5,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_purchase_label_value_single_tax_id",
+    "family": "label_value_purchase",
+    "raw_text_file": "files/purchase_label_value_single_tax_id.txt",
+    "mime_type": "text/plain",
+    "input_kind": "pdf_digital",
+    "company_context": {
+      "name": "Beta Tech Advisors SL",
+      "tax_id": "B99887766"
+    },
+    "tags": [
+      "synthetic",
+      "unseen_company",
+      "modality_pdf_digital",
+      "layout_label_value",
+      "party_single_tax_id_visible",
+      "fiscal_iva"
+    ],
+    "expected": {
+      "numero_factura": "FC-2026-077",
+      "tipo_factura": "compra",
+      "fecha": "2026-03-10",
+      "proveedor_contains": "TALLERES RIVERA",
+      "cliente_contains": "BETA TECH ADVISORS",
+      "cif_cliente": "B99887766",
+      "base_imponible": 80.0,
+      "iva_porcentaje": 21.0,
+      "iva": 16.8,
+      "total": 96.8,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_purchase_footer_supplier_only_new",
+    "family": "shipping_billing_purchase",
+    "raw_text_file": "files/purchase_footer_supplier_only_new.txt",
+    "mime_type": "text/plain",
+    "input_kind": "pdf_scanned",
+    "company_context": {
+      "name": "Alfa Digital Canarias SL",
+      "tax_id": "B22334455"
+    },
+    "tags": [
+      "synthetic",
+      "unseen_company",
+      "modality_pdf_scanned",
+      "layout_shipping_billing",
+      "layout_footer_supplier",
+      "party_supplier_only_in_footer",
+      "party_multiple_tax_ids_visible",
+      "party_same_company_in_shipping_and_billing",
+      "fiscal_igic",
+      "noise_low_contrast",
+      "edge_same_company_in_shipping_and_billing",
+      "edge_supplier_legal_footer_only"
+    ],
+    "expected": {
+      "numero_factura": "PR-8802",
+      "tipo_factura": "compra",
+      "fecha": "2026-04-02",
+      "proveedor_contains": "COMERCIAL ATLANTICO INSULAR",
+      "cif_proveedor": "B66778899",
+      "cliente_contains": "ALFA DIGITAL CANARIAS",
+      "cif_cliente": "B22334455",
+      "base_imponible": 50.0,
+      "iva_porcentaje": 7.0,
+      "iva": 3.5,
+      "total": 53.5,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_purchase_tabular_discount_iva",
+    "family": "purchase_tabular_discount",
+    "raw_text_file": "files/purchase_tabular_discount_iva.txt",
+    "mime_type": "text/plain",
+    "input_kind": "pdf_digital",
+    "company_context": {
+      "name": "Beta Tech Advisors SL",
+      "tax_id": "B99887766"
+    },
+    "tags": [
+      "synthetic",
+      "unseen_company",
+      "modality_pdf_digital",
+      "layout_tabular",
+      "line_discount",
+      "fiscal_iva"
+    ],
+    "expected": {
+      "numero_factura": "PRO-2026-151",
+      "tipo_factura": "compra",
+      "fecha": "2026-03-28",
+      "proveedor_contains": "SERVICIOS DELTA NORTE",
+      "cif_proveedor": "B55667788",
+      "cliente_contains": "BETA TECH ADVISORS",
+      "cif_cliente": "B99887766",
+      "base_imponible": 135.0,
+      "iva_porcentaje": 21.0,
+      "iva": 28.35,
+      "total": 163.35,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_purchase_person_supplier_irpf",
+    "family": "purchase_with_irpf",
+    "raw_text_file": "files/purchase_person_supplier_irpf.txt",
+    "mime_type": "text/plain",
+    "input_kind": "pdf_digital",
+    "company_context": {
+      "name": "Beta Tech Advisors SL",
+      "tax_id": "B99887766"
+    },
+    "tags": [
+      "synthetic",
+      "unseen_company",
+      "modality_pdf_digital",
+      "layout_label_value",
+      "party_company_vs_person",
+      "fiscal_iva",
+      "fiscal_irpf"
+    ],
+    "expected": {
+      "numero_factura": "18/2026",
+      "tipo_factura": "compra",
+      "fecha": "2026-03-27",
+      "proveedor_contains": "JUAN MARTIN PEREZ",
+      "cif_proveedor": "43888777H",
+      "cliente_contains": "BETA TECH ADVISORS",
+      "cif_cliente": "B99887766",
+      "base_imponible": 1000.0,
+      "iva_porcentaje": 21.0,
+      "iva": 210.0,
+      "retencion_porcentaje": 15.0,
+      "retencion": 150.0,
+      "total": 1060.0,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_purchase_codes_serials_label_value",
+    "family": "purchase_codes_serials",
+    "raw_text_file": "files/purchase_codes_serials_label_value.txt",
+    "mime_type": "text/plain",
+    "input_kind": "pdf_digital",
+    "company_context": {
+      "name": "Beta Tech Advisors SL",
+      "tax_id": "B99887766"
+    },
+    "tags": [
+      "synthetic",
+      "unseen_company",
+      "modality_pdf_digital",
+      "layout_label_value",
+      "line_codes_and_serials",
+      "fiscal_iva"
+    ],
+    "expected": {
+      "numero_factura": "HW-2026-019",
+      "tipo_factura": "compra",
+      "fecha": "2026-03-22",
+      "proveedor_contains": "HARDWARE ATLANTICO",
+      "cif_proveedor": "B66770011",
+      "cliente_contains": "BETA TECH ADVISORS",
+      "cif_cliente": "B99887766",
+      "base_imponible": 90.0,
+      "iva_porcentaje": 21.0,
+      "iva": 18.9,
+      "total": 108.9,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_scanned_purchase_label_value_noise",
+    "family": "label_value_purchase",
+    "raw_text_file": "files/scanned_purchase_label_value_noise.txt",
+    "mime_type": "text/plain",
+    "input_kind": "pdf_scanned",
+    "preprocessing_steps": [
+      "synthetic_raw_text",
+      "synthetic_ocr_noise",
+      "synthetic_jpeg_compression",
+      "synthetic_low_contrast"
+    ],
+    "company_context": {
+      "name": "Beta Tech Advisors SL",
+      "tax_id": "B99887766"
+    },
+    "tags": [
+      "synthetic",
+      "unseen_company",
+      "modality_pdf_scanned",
+      "layout_label_value",
+      "fiscal_iva",
+      "noise_jpeg_compression",
+      "noise_low_contrast"
+    ],
+    "expected": {
+      "numero_factura": "SC-2026-301",
+      "tipo_factura": "compra",
+      "fecha": "2026-03-30",
+      "proveedor_contains": "EQUIPAMIENTO MEDICO SUR",
+      "cif_proveedor": "B77889900",
+      "cliente_contains": "BETA TECH ADVISORS",
+      "cif_cliente": "B99887766",
+      "base_imponible": 420.0,
+      "iva_porcentaje": 21.0,
+      "iva": 88.2,
+      "total": 508.2,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_purchase_multiple_rates_rotation_crop",
+    "family": "label_value_purchase",
+    "raw_text_file": "files/purchase_multiple_rates_rotation_crop.txt",
+    "mime_type": "text/plain",
+    "input_kind": "pdf_scanned",
+    "preprocessing_steps": [
+      "synthetic_raw_text",
+      "synthetic_rotation",
+      "synthetic_crop"
+    ],
+    "company_context": {
+      "name": "Beta Tech Advisors SL",
+      "tax_id": "B99887766"
+    },
+    "tags": [
+      "synthetic",
+      "unseen_company",
+      "modality_pdf_scanned",
+      "layout_label_value",
+      "fiscal_iva",
+      "fiscal_multiple_rates",
+      "noise_rotation",
+      "noise_crop"
+    ],
+    "expected": {
+      "numero_factura": "MR-2026-204",
+      "tipo_factura": "compra",
+      "fecha": "2026-04-04",
+      "proveedor_contains": "SUMINISTROS MIXTOS ATLANTICO",
+      "cif_proveedor": "B44550011",
+      "cliente_contains": "BETA TECH ADVISORS",
+      "cif_cliente": "B99887766",
+      "base_imponible": 150.0,
+      "iva": 26.0,
+      "total": 176.0,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_ticket_vertical_payment_change",
+    "family": "ticket_tax_breakdown",
+    "raw_text_file": "files/ticket_vertical_payment_change.txt",
+    "mime_type": "text/plain",
+    "input_kind": "ticket",
+    "tags": [
+      "synthetic",
+      "modality_ticket",
+      "layout_ticket_vertical",
+      "fiscal_tax_included"
+    ],
+    "expected": {
+      "numero_factura": "2026/7781-000045",
+      "proveedor_contains": "SUPERMERCADOS COSTA NORTE",
+      "cif_proveedor": "B76543210",
+      "base_imponible": 4.13,
+      "iva": 0.37,
+      "total": 4.5,
+      "document_type": "factura_simplificada"
+    }
+  },
+  {
+    "id": "synthetic_purchase_pdf_photo_footer_supplier_shadow",
+    "family": "shipping_billing_purchase",
+    "raw_text_file": "files/purchase_pdf_photo_footer_supplier_shadow.txt",
+    "mime_type": "text/plain",
+    "input_kind": "pdf_photo",
+    "preprocessing_steps": [
+      "synthetic_raw_text",
+      "synthetic_shadow"
+    ],
+    "company_context": {
+      "name": "Alfa Digital Canarias SL",
+      "tax_id": "B22334455"
+    },
+    "tags": [
+      "synthetic",
+      "unseen_company",
+      "modality_pdf_photo",
+      "layout_shipping_billing",
+      "layout_footer_supplier",
+      "party_multiple_tax_ids_visible",
+      "party_supplier_only_in_footer",
+      "party_same_company_in_shipping_and_billing",
+      "fiscal_igic",
+      "noise_shadow",
+      "edge_supplier_legal_footer_only"
+    ],
+    "expected": {
+      "numero_factura": "PR-4411",
+      "tipo_factura": "compra",
+      "fecha": "2026-04-05",
+      "proveedor_contains": "COMERCIAL ATLANTICO INSULAR",
+      "cif_proveedor": "B66778899",
+      "cliente_contains": "ALFA DIGITAL CANARIAS",
+      "cif_cliente": "B22334455",
+      "base_imponible": 50.0,
+      "iva": 3.5,
+      "total": 53.5,
+      "document_type": "factura_completa"
+    }
+  },
+  {
+    "id": "synthetic_sale_image_photo_blur_shadow",
+    "family": "visual_noise_variants",
+    "raw_text_file": "files/sale_image_photo_blur_shadow.txt",
+    "mime_type": "text/plain",
+    "input_kind": "image_photo",
+    "preprocessing_steps": [
+      "synthetic_raw_text",
+      "synthetic_blur",
+      "synthetic_shadow"
+    ],
+    "company_context": {
+      "name": "Alfa Sistemas Canarios SL",
+      "tax_id": "B22331122"
+    },
+    "tags": [
+      "synthetic",
+      "unseen_company",
+      "modality_image_photo",
+      "layout_header_two_columns",
+      "party_company_vs_person",
+      "party_single_tax_id_visible",
+      "fiscal_igic",
+      "noise_blur",
+      "noise_shadow"
+    ],
+    "expected": {
+      "numero_factura": "FV-2026-332",
+      "tipo_factura": "venta",
+      "fecha": "2026-04-05",
+      "proveedor_contains": "ALFA SISTEMAS CANARIOS",
+      "cif_proveedor": "B22331122",
+      "cliente_contains": "LUCIA MORENO",
+      "cif_cliente": "43219876T",
+      "base_imponible": 90.0,
+      "iva_porcentaje": 7.0,
+      "iva": 6.3,
+      "total": 96.3,
+      "document_type": "factura_completa"
+    }
+  }
+]

@@ -7,12 +7,11 @@ INSERT INTO asesorias (nombre, estado)
 VALUES ('Asesoria Central Demo', 'ACTIVA');
 
 -- Usuario administrador
--- Email: admin@difactura.local
--- Password: Admin123!
+-- Credenciales de ejemplo para entorno local
 INSERT INTO usuarios (asesoria_id, email, password_hash, nombre, rol, activo)
 VALUES (
     1,
-    'admin@difactura.local',
+    'admin@local.test',
     '$2b$12$5aap1aYXHgkfxIh4KPCY2utktsLMW6oMcGIV9ojks8MJbsU3kiAH6',
     'Administrador',
     'ADMIN',
@@ -23,7 +22,7 @@ VALUES (
 INSERT INTO usuarios (asesoria_id, email, password_hash, nombre, rol, activo)
 VALUES (
     1,
-    'revisor@difactura.local',
+    'revisor@local.test',
     '$2b$12$5aap1aYXHgkfxIh4KPCY2utktsLMW6oMcGIV9ojks8MJbsU3kiAH6',
     'Revisor Demo',
     'REVISOR',
@@ -38,4 +37,4 @@ INSERT INTO proveedores (nombre, nombre_normalizado, cif, direccion, email, tele
 
 -- Empresa cliente base
 INSERT INTO clientes (asesoria_id, nombre, nombre_normalizado, cif, direccion, email, telefono, estado) VALUES
-(1, 'Disoft Servicios Informaticos SL', 'DISOFT SERVICIOS INFORMATICOS', 'B35222249', 'C/ Federico Viera, 163, 35012 Las Palmas de Gran Canaria', 'administracion@disoftweb.com', '928470347', 'ACTIVA');
+(1, 'Empresa Cliente Demo SL', 'EMPRESA CLIENTE DEMO', 'B44556622', 'Calle Ejemplo 15, Las Palmas de Gran Canaria', 'administracion@cliente-demo.test', '928000000', 'ACTIVA');

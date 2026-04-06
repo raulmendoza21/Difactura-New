@@ -1,0 +1,8 @@
+FACTURA RECTIFICATIVA
+Numero: AB202600002
+Fecha: 07/01/2026
+Rectifica a FI202500122
+Base imponible: -25,00
+IGIC 7,00%
+Cuota IGIC: -1,75
+Total factura: -26,75

@@ -1,148 +1,315 @@
-# Difactura - Contrato de datos documentales y contables
+# Difactura - Contrato estable del motor documental
 
 ## 1. Objetivo
 
-Antes de construir la capa contable, el proyecto necesita un contrato de datos estable.
+Este documento fija el contrato estable que debe protegerse en la fase actual.
 
-La idea es separar claramente:
+La prioridad ahora no es cerrar:
 
-- lo que se extrae del documento
-- lo que se normaliza fiscalmente
-- lo que se propone contablemente
-- lo que finalmente valida una persona
+- la contabilidad final
+- la persistencia definitiva por empresa
+- la integracion ERP
 
-Si estas capas se mezclan, la extraccion se vuelve fragil y la contabilidad queda acoplada a OCR.
+La prioridad ahora si es cerrar:
 
----
+- la entrada estable del motor
+- la salida estable del motor
+- la semantica de evidencia, inferencia y revision
+- la compatibilidad temporal con el MVP actual
 
-## 2. Referencias oficiales que condicionan el contrato
+Documento rector:
 
-El diseno debe respetar, como minimo, estos marcos:
-
-- Reglamento de facturacion en Espana:
-  - Real Decreto 1619/2012
-  - datos obligatorios de factura completa, simplificada y rectificativa
-  - fuente: https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696
-- IGIC en Canarias:
-  - informacion general y modelos de autoliquidacion de la Agencia Tributaria Canaria
-  - modelos relevantes para el proyecto: 420 trimestral y 425 resumen anual
-  - fuente: https://www3.gobiernodecanarias.org/tributos/atc/w/igic-impuesto-general-indirecto-canario-
-- Tipos del IGIC vigentes tras la modificacion aplicable desde 2026:
-  - estructura de tipos 0, 1, 3, 5, 7, 9.5, 15 y 20
-  - fuente legal: https://www.gobiernodecanarias.org/boc/2025/256/4414.html
-- Plan General de Contabilidad:
-  - base para escenarios y cuentas contables
-  - fuente: https://www.boe.es/buscar/act.php?id=BOE-A-2007-19884
-
-Estas fuentes no obligan a que el sistema resuelva toda la contabilidad automaticamente, pero si condicionan que datos deben existir y que variantes documentales deben contemplarse.
+- ver `docs/motor-documental-desacoplado.md`
 
 ---
 
-## 3. Principio de modelado
+## 2. Regla base del contrato
 
-No se debe usar un unico JSON para todo.
+El motor documental debe considerarse una pieza desacoplada.
 
-El contrato recomendado del sistema se divide en 4 niveles:
+Por tanto:
 
-1. `document_extracted`
-2. `document_normalized`
-3. `accounting_proposal`
-4. `validated_result`
+- el proveedor OCR no forma parte del contrato estable
+- la persistencia del MVP no forma parte del contrato estable
+- la BD real futura de la empresa no forma parte del contrato estable
 
-### 3.1 `document_extracted`
+El contrato estable del motor es:
 
-Representa lo que sale del OCR y de la IA documental.
+- `engine_request`
+- `normalized_document`
+- `field_confidence`
+- `coverage`
+- `evidence`
+- `decision_flags`
+- `company_match`
+- `processing_trace`
+- `warnings`
+- `raw_text`
 
-Puede contener huecos, incertidumbre y texto sucio.
+Compatibilidad temporal:
 
-### 3.2 `document_normalized`
-
-Representa la factura ya interpretada con estructura fiscal y de negocio.
-
-Debe ser el contrato base para:
-
-- validaciones
-- deteccion de duplicados
-- UI de revision
-- generacion de propuesta contable
-
-### 3.3 `accounting_proposal`
-
-Representa el borrador de asiento generado por reglas y ayudas de IA.
-
-Debe ser editable y trazable.
-
-### 3.4 `validated_result`
-
-Representa el resultado final confirmado por humano.
-
-Es el unico que deberia acabar generando asiento confirmado o exportacion contable.
+- se mantiene una salida `legacy_flattened_v1` para no romper backend ni MVP mientras dura la migracion
 
 ---
 
-## 4. Estructura de `document_normalized`
+## 3. Version activa del contrato
 
-## 4.1 `document_meta`
+- `contract.name`: `difactura.document_engine`
+- `contract.version`: `2026-03-30`
+- `contract.primary_payload`: `normalized_document`
+- `contract.compatibility_mode`: `legacy_flattened_v1`
 
-Metadatos tecnicos del documento:
+La salida principal que debe sobrevivir al tiempo es `normalized_document`.
+La compatibilidad legacy existe solo para convivir con el MVP actual.
+
+---
+
+## 4. Entrada estable del motor
+
+## 4.1 Forma actual de invocacion
+
+Mientras el motor se consuma por HTTP interno, la invocacion actual puede seguir siendo multipart:
+
+- `file`
+- `mime_type`
+- `company_name`
+- `company_tax_id`
+
+## 4.2 Representacion estable interna
+
+Aunque el transporte actual sea multipart, internamente la entrada estable debe modelarse como:
+
+### `engine_request`
+
+- `file_name`
+- `mime_type`
+- `company_context`
+- `options`
+
+### `engine_request.company_context`
+
+- `name`
+- `tax_id`
+
+### `engine_request.options`
+
+- `include_raw_text`
+- `include_evidence`
+- `include_processing_trace`
+
+Regla:
+
+- `company_context` se usa como pista de desambiguacion, nunca como hardcode de empresa
+
+---
+
+## 4.3 Bundle interno estable
+
+El motor debe convertir cualquier entrada a un `bundle interno` comun antes de resolver campos.
+
+Version interna activa del bundle:
+
+- `bundle.contract.name`: `difactura.document_bundle`
+- `bundle.contract.version`: `2026-03-30`
+
+El bundle no es contrato publico de negocio, pero si es contrato interno estable del motor.
+
+Debe incluir, como minimo:
+
+- `contract`
+- `input_profile`
+- `source_stats`
+- `raw_text`
+- `page_count`
+- `page_texts`
+- `pages`
+- `spans`
+- `regions`
+- `candidate_groups`
+
+### `bundle.input_profile`
+
+Debe reflejar:
+
+- `input_kind`
+- `text_source`
+- `requested_provider`
+- `document_provider`
+- `fallback_provider`
+- `fallback_applied`
+- `fallback_reason`
+- `is_digital_pdf`
+- `used_ocr`
+- `used_page_images`
+- `ocr_engine`
+- `preprocessing_steps`
+- `document_family_hint`
+- `low_resolution`
+- `rotation_hint`
+- `input_route`
+
+### `bundle.source_stats`
+
+Debe poder resumir:
+
+- `page_count`
+- `total_spans`
+- `native_span_count`
+- `ocr_span_count`
+- `region_count`
+
+### `bundle.pages`
+
+Cada pagina debe poder contener:
+
+- `page_number`
+- `width`
+- `height`
+- `native_text`
+- `ocr_text`
+- `reading_text`
+- `spans`
+
+### `bundle.spans`
+
+Cada span debe poder contener:
+
+- `span_id`
+- `page`
+- `text`
+- `bbox`
+- `source`
+- `engine`
+- `block_no`
+- `line_no`
+- `confidence`
+
+### `bundle.regions`
+
+Cada region debe poder contener:
+
+- `region_id`
+- `region_type`
+- `page`
+- `bbox`
+- `text`
+- `span_ids`
+- `confidence`
+
+### `bundle.candidate_groups`
+
+Es espacio estable para candidatos previos a la resolucion final.
+
+Cada candidato debe poder contener:
+
+- `candidate_id`
+- `field`
+- `value`
+- `source`
+- `extractor`
+- `page`
+- `region_type`
+- `bbox`
+- `score`
+
+Regla:
+
+- el resolvedor no debe depender del formato crudo del proveedor OCR
+- el resolvedor debe trabajar sobre el bundle interno
+
+---
+
+## 5. Salida estable del motor
+
+La respuesta del motor debe incluir, como minimo:
+
+- `contract`
+- `engine_request`
+- `success`
+- `normalized_document`
+- `document_input`
+- `field_confidence`
+- `coverage`
+- `evidence`
+- `decision_flags`
+- `company_match`
+- `processing_trace`
+- `raw_text`
+- `method`
+- `provider`
+- `pages`
+- `warnings`
+
+Compatibilidad temporal adicional:
+
+- `legacy_data`
+- campos legacy aplanados en top-level mientras el backend siga necesitando `numero_factura`, `proveedor`, `total`, etc.
+- el backend debe adaptar ese contrato a su persistencia temporal mediante una capa adaptadora, no acoplando directamente el motor a las tablas del MVP
+
+Regla:
+
+- cualquier consumidor nuevo debe apoyarse en `normalized_document`
+- los campos legacy quedan como capa de transicion
+
+---
+
+## 6. Payload principal: `normalized_document`
+
+Este es el contrato de negocio estable de la fase actual.
+
+Debe incluir, como minimo:
+
+- `document_meta`
+- `classification`
+- `identity`
+- `issuer`
+- `recipient`
+- `totals`
+- `tax_breakdown`
+- `withholdings`
+- `line_items`
+- `payment_info`
+- `import_export_info`
+
+## 6.1 `document_meta`
+
+Debe incluir, como minimo:
 
 - `document_id`
 - `advisory_id`
 - `company_id`
 - `source_channel`
-  - `web`
-  - `mobile`
-  - `camera`
-  - `email`
-  - `api`
+- `input_kind`
+- `text_source`
 - `file_name`
 - `mime_type`
 - `page_count`
-- `language`
 - `ocr_engine`
+- `preprocessing_steps`
 - `extraction_provider`
 - `extraction_method`
 - `extraction_confidence`
 - `warnings`
 - `raw_text_excerpt`
 
-## 4.2 `classification`
+## 6.2 `classification`
 
-Clasificacion documental y funcional:
+La clasificacion debe salir de un resolvedor semantico comun del motor, no de heuristicas repartidas entre varios modulos.
+Esto implica que `document_type`, `invoice_side`, `operation_kind`, `is_rectificative` e `is_simplified`
+deben resolverse de forma coherente entre si y alineadas con `company_match`.
+
+Debe incluir, como minimo:
 
 - `document_type`
-  - `desconocido`
-  - `factura_completa`
-  - `factura_simplificada`
-  - `factura_rectificativa`
-  - `abono`
-  - `ticket`
-  - `proforma`
-  - `dua`
-  - `otro`
 - `invoice_side`
-  - `recibida`
-  - `emitida`
-  - `desconocida`
 - `operation_kind`
-  - `compra`
-  - `venta`
-  - `gasto`
-  - `ingreso`
-  - `inmovilizado`
-  - `mercaderia`
-  - `servicio`
-  - `anticipo`
-  - `importacion`
-  - `intracomunitaria`
-  - `desconocida`
 - `is_rectificative`
 - `is_simplified`
 - `duplicate_candidate`
 
-## 4.3 `identity`
+## 6.3 `identity`
 
-Identidad y referencias del documento:
+Debe incluir, como minimo:
 
 - `series`
 - `invoice_number`
@@ -156,9 +323,9 @@ Identidad y referencias del documento:
 - `delivery_note_reference`
 - `contract_reference`
 
-## 4.4 `issuer`
+## 6.4 `issuer` y `recipient`
 
-Parte emisora:
+Cada uno debe poder contener:
 
 - `name`
 - `legal_name`
@@ -173,15 +340,9 @@ Parte emisora:
 - `phone`
 - `iban`
 
-## 4.5 `recipient`
+## 6.5 `totals`
 
-Parte receptora:
-
-- mismos campos que `issuer`
-
-## 4.6 `totals`
-
-Magnitudes economicas:
+Debe incluir, como minimo:
 
 - `currency`
 - `exchange_rate`
@@ -193,23 +354,11 @@ Magnitudes economicas:
 - `total`
 - `amount_due`
 
-## 4.7 `tax_breakdown`
+## 6.6 `tax_breakdown`
 
-Desglose fiscal estructurado.
-
-Debe existir como lista, porque una factura real puede traer varios tipos o varios regimens.
-
-Cada item deberia poder recoger:
+Cada item debe poder contener:
 
 - `tax_regime`
-  - `IGIC`
-  - `IVA`
-  - `AIEM`
-  - `EXEMPT`
-  - `NOT_SUBJECT`
-  - `REVERSE_CHARGE`
-  - `IRPF`
-  - `UNKNOWN`
 - `tax_code`
 - `rate`
 - `taxable_base`
@@ -220,21 +369,18 @@ Cada item deberia poder recoger:
 - `reverse_charge`
 - `notes`
 
-## 4.8 `withholdings`
+## 6.7 `withholdings`
 
-Retenciones documentales:
+Cada item debe poder contener:
 
 - `withholding_type`
-  - `IRPF`
-  - `OTHER`
-  - `NONE`
 - `rate`
 - `taxable_base`
 - `amount`
 
-## 4.9 `line_items`
+## 6.8 `line_items`
 
-Lineas del documento:
+Cada item debe poder contener:
 
 - `line_no`
 - `description`
@@ -252,236 +398,138 @@ Lineas del documento:
 - `product_code`
 - `confidence`
 
-## 4.10 `payment_info`
-
-Informacion de pago:
-
-- `payment_method`
-- `payment_terms`
-- `installments`
-  - `due_date`
-  - `amount`
-  - `payment_method`
-- `iban`
-- `direct_debit`
-- `paid_at_issue`
-
-## 4.11 `import_export_info`
-
-Bloque necesario para casos mas complejos:
-
-- `dua_number`
-- `customs_date`
-- `origin_country`
-- `destination_country`
-- `intracommunity_operator`
-- `aiem_amount`
-
 ---
 
-## 5. Estructura de `accounting_proposal`
+## 7. Semantica de evidencia y resolucion
 
-Este JSON no representa OCR. Representa interpretacion contable.
+La evidencia no es decorativa.
+Es parte del contrato de seguridad operativa del motor.
 
-## 5.1 Datos generales
+## 7.1 Estructura por campo
 
-- `scenario`
-  - `factura_recibida_gasto_corriente`
-  - `factura_recibida_mercaderias`
-  - `factura_recibida_inmovilizado`
-  - `factura_emitida_ingreso`
-  - `factura_con_retencion`
-  - `factura_rectificativa_abono`
-  - `factura_exenta`
-  - `factura_no_sujeta`
-  - `factura_con_inversion_sujeto_pasivo`
-  - `adquisicion_intracomunitaria`
-  - `importacion_con_dua`
-  - `anticipo_cliente`
-  - `anticipo_proveedor`
-  - `factura_con_varios_tipos`
-  - `factura_simplificada`
-  - `desconocido`
-- `posting_date`
-- `document_date`
-- `journal_code`
-- `concept`
-- `tax_regime`
-- `confidence`
-- `warnings`
-- `rule_trace`
-- `status`
-  - `draft`
-  - `reviewed`
-  - `validated`
+`evidence` debe ser un mapa por campo.
 
-## 5.2 Counterparty
+Cada item de evidencia debe poder incluir:
 
-- `role`
-  - `supplier`
-  - `customer`
-  - `other`
-- `party_name`
-- `party_tax_id`
-- `account_code`
-
-## 5.3 Entry lines
-
-Cada linea del asiento deberia incluir:
-
-- `line_no`
-- `account_code`
-- `account_name`
-- `side`
-  - `DEBE`
-  - `HABER`
-- `amount`
-- `description`
-- `tax_link`
-- `analytic_account`
-- `cost_center`
-- `project_code`
-- `maturity_date`
+- `field`
+- `value`
+- `value_kind`
 - `source`
-  - `RULE`
-  - `AI`
-  - `MANUAL`
+- `extractor`
+- `is_final`
+- `requires_review`
+- `page`
+- `bbox`
+- `score`
+- `text`
+
+## 7.2 Significado de `value_kind`
+
+### `observed`
+
+El valor fue visto directamente en una fuente documental u OCR.
+
+Ejemplos:
+
+- texto PDF nativo
+- OCR local
+- OCR externo
+- candidato de layout
+
+### `resolved`
+
+El valor es el resultado final elegido por el resolvedor entre varios candidatos o tras reconciliacion global.
+
+No implica necesariamente inferencia.
+Implica que el motor lo selecciono como valor final.
+
+### `inferred`
+
+El valor no pudo leerse con suficiente claridad y fue deducido por coherencia matematica, fiscal o contextual.
+
+Ejemplos validos:
+
+- inferir cuota IGIC desde base y porcentaje
+- inferir porcentaje desde base y total
+- inferir contraparte por company match cuando el OCR es ambiguo
+
+Regla:
+
+- todo valor `inferred` debe bajar confianza
+- todo valor `inferred` debe quedar trazado en evidencia
+- si el campo es sensible, tambien debe activar revision
 
 ---
 
-## 6. Escenarios contables que deben contemplarse
+## 8. Cobertura, confianza y revision
 
-Aunque el MVP no persista todavia el asiento final, el contrato debe dejar previstos estos escenarios:
+El motor debe devolver:
 
-- factura recibida con gasto corriente
-- factura recibida con compra de mercaderias
-- factura recibida con inmovilizado
-- factura emitida de ingreso
-- factura rectificativa o abono
-- factura con retencion de IRPF
-- factura con varios tipos impositivos
-- factura exenta
-- factura no sujeta
-- factura con inversion del sujeto pasivo
-- adquisicion intracomunitaria
-- importacion con DUA
-- documento con IGIC
-- documento con IVA
-- documento con AIEM
-- anticipo de cliente
-- anticipo a proveedor
+- `field_confidence`
+- `coverage`
+- `decision_flags`
+
+Regla de producto:
+
+- el motor puede inferir
+- el motor no debe inventar
+- si no hay suficiente evidencia, debe marcar revision
+
+`coverage` mide presencia de campos criticos.
+`field_confidence` mide fiabilidad por campo.
+`decision_flags` explica por que conviene revisar.
 
 ---
 
-## 7. Que debe salir del OCR/IA y que debe salir de reglas
+## 9. Compatibilidad temporal con el MVP
 
-## 7.1 Debe salir del OCR/IA
+Mientras siga vivo el MVP actual, el motor seguira exponiendo:
 
-- numero de factura
-- fechas
-- emisor y receptor
-- CIF/NIF
-- base, cuota y total
-- lineas de documento
-- referencias de rectificacion
-- informacion de pago si aparece
+- `legacy_data`
+- y los campos legacy aplanados en top-level
 
-## 7.2 Debe salir de normalizacion y reglas
+Ejemplos de campos legacy:
 
-- clasificacion documental final
-- regimen fiscal interpretado
-- desglose fiscal consolidado
-- deteccion de duplicado
-- hints de categoria
-- hints de cuenta contable
-- escenario contable
+- `numero_factura`
+- `fecha`
+- `proveedor`
+- `cif_proveedor`
+- `cliente`
+- `cif_cliente`
+- `base_imponible`
+- `iva`
+- `iva_porcentaje`
+- `retencion`
+- `retencion_porcentaje`
+- `total`
+- `lineas`
+- `tipo_factura`
 
-## 7.3 Debe quedar para validacion humana
+Regla:
 
-- cuenta exacta
-- contrapartida exacta
-- deducibilidad
-- ajustes de lineas
-- resolucion de casos raros o ambiguos
+- los consumidores nuevos no deben construirse sobre estos campos
+- el backend actual puede seguir usandolos mientras dure la transicion
 
 ---
 
-## 8. Gap real de extraccion respecto al estado actual
+## 10. Lo contable sigue fuera del contrato principal
 
-Hoy el sistema ya extrae razonablemente:
+En esta fase no se cierra como contrato estable:
 
-- numero
-- fecha
-- proveedor
-- cliente
-- base
-- tipo de impuesto simple
-- total
-- lineas basicas
+- `accounting_proposal`
+- `validated_result`
+- asientos finales
+- integracion ERP
 
-Pero para cubrir el contrato nuevo, faltara mejorar especialmente:
-
-- deteccion fiable del tipo documental
-- separacion entre factura completa, simplificada y rectificativa
-- `tax_breakdown` multi-linea
-- distincion real entre IGIC, IVA, exenta y no sujeta
-- retenciones
-- vencimientos
-- referencias de factura rectificada
-- informacion de importacion y DUA
-- hints utiles para contabilidad
+Eso podra existir despues, pero no debe condicionar el motor documental.
 
 ---
 
-## 9. Priorizacion recomendada para la mejora de extraccion
+## 11. Resultado esperado de la Fase 1
 
-### Prioridad 1
+La Fase 1 se considerara cerrada cuando:
 
-Imprescindible para empezar a pensar en asiento:
-
-- `document_type`
-- `invoice_side`
-- `issue_date`
-- `invoice_number`
-- `issuer`
-- `recipient`
-- `totals`
-- `tax_breakdown`
-- `line_items`
-
-### Prioridad 2
-
-Muy importante para casos reales:
-
-- `withholdings`
-- `due_date`
-- `rectified_invoice_number`
-- `payment_info`
-- `duplicate_candidate`
-
-### Prioridad 3
-
-Para escenarios avanzados:
-
-- `dua_number`
-- `aiem_amount`
-- `intracommunity_operator`
-- `analytic_account`
-- `cost_center`
-- `project_code`
-
----
-
-## 10. Decision de producto recomendada
-
-La siguiente fase del proyecto no deberia ser "guardar asientos" sin mas.
-
-Deberia ser:
-
-1. cerrar este contrato de datos
-2. adaptar la UI de revision a `document_normalized`
-3. generar `accounting_proposal` por factura
-4. dejar que un humano valide
-5. solo entonces persistir el asiento confirmado
-
-Ese orden reduce riesgo y evita que la capa contable se apoye en una extraccion demasiado pobre.
+- documentacion y modelos reflejen este contrato
+- exista version explicita del contrato
+- el `ai-service` siga siendo compatible con el backend actual
+- quede separada la salida estable de la salida legacy

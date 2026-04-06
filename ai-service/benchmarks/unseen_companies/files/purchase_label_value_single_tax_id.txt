@@ -1,0 +1,10 @@
+FACTURA
+Numero: FC-2026-077
+Fecha: 10/03/2026
+Proveedor: Talleres Rivera SL
+Cliente: Beta Tech Advisors SL
+CIF cliente: B99887766
+Concepto: Mantenimiento preventivo anual
+Base imponible: 80,00
+IVA 21%: 16,80
+Total: 96,80

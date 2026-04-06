@@ -1,9 +1,23 @@
 from app.models.invoice_model import InvoiceData, LineItem
-from app.models.document_bundle import BoundingBox, DocumentBundle, DocumentPageBundle, DocumentSpan, LayoutRegion
+from app.models.document_bundle import (
+    BoundingBox,
+    BundleCandidate,
+    BundleContractInfo,
+    BundleInputProfile,
+    BundleSourceStats,
+    DocumentBundle,
+    DocumentPageBundle,
+    DocumentSpan,
+    LayoutRegion,
+)
 from app.models.extraction_result import (
     CompanyMatch,
     DecisionFlag,
     DocumentInputProfile,
+    EngineCompanyContext,
+    EngineContractInfo,
+    EngineRequestContext,
+    EngineRequestOptions,
     ExtractionCoverage,
     ExtractionResult,
     FieldEvidence,
@@ -20,3 +34,4 @@ from app.models.document_contract import (
     WithholdingBreakdownItem,
     build_normalized_document_from_invoice_data,
 )
+from app.models.document_provider import ProviderDocumentResult, ProviderPageEntry

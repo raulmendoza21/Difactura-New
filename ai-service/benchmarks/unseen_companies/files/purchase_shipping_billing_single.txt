@@ -1,0 +1,35 @@
+Fecha: 06/03/2026
+Nº Factura: GC 26001163
+Importe: 26,75
+Factura
+Datos de ENVIO
+DISOFT SERVICIOS INFORMATICOS
+Datos de FACTURACION
+DISOFT SERV. INFORM S.L.
+CIF B-35.222.249
+Part. Nº
+DESCRIPCION
+UDS.
+PRECIO % DTO.
+NETO
+ESDPBU1Y-1A4 ANTIVIRUS AVAST PREMIUM BUSINESS SECURITY 1YEAR 1-4 USUARIOS (XIT DIGITAL) WHQD3M9MKK3P6CXWV34MFTR2X
+1,00
+25,00
+25,00
+Conceptos
+Portes
+Impuestos % Impuestos
+Importe neto
+Descuento
+Ajuste
+Base imponible
+Total
+Valor
+0
+7%
+1,75
+25,00
+0,00
+25,00
+26,75
+Alberto Villacorta, S.L.U. - Registro Mercantil de Las Palmas - CIF B35246388

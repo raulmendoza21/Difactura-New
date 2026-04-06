@@ -1,0 +1,29 @@
+Factura
+Fecha: 02/04/2026
+N Factura: PR-8802
+Datos de envio
+ALFA DIGITAL CANARIAS SL
+C/ Lomo Verde, 12
+35010 LAS PALMAS
+Datos de facturacion
+ALFA DIG. CANARIAS S.L.
+C/ Lomo Verde, 12
+35010 LAS PALMAS
+CIF
+B22334455
+Descripcion
+Licencia antivirus cloud
+Conceptos
+Portes
+Impuestos % Impuestos
+Importe neto
+Base imponible
+Total
+Valor
+0
+7%
+3,50
+50,00
+50,00
+53,50
+Comercial Atlantico Insular SL - Registro Mercantil de Las Palmas - CIF B66778899

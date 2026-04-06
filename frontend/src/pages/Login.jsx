@@ -13,7 +13,7 @@ export default function Login() {
           <h2 className="text-lg font-semibold text-slate-800 mb-6">Iniciar sesión</h2>
           <LoginForm />
         </div>
-        <p className="text-center text-xs text-slate-400 mt-6">Desarrollado por Disoft</p>
+        <p className="text-center text-xs text-slate-400 mt-6">Acceso seguro al entorno documental</p>
       </div>
     </div>
   );

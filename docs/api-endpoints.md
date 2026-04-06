@@ -1,309 +1,284 @@
-# Difactura - API del MVP documental
+# Difactura - API alineada con el plan actual
 
 ## 1. Objetivo
 
-Este documento define los endpoints minimos de la primera fase del producto.
+Este documento describe la API de negocio que encaja con el plan vigente.
 
-La API de este MVP cubre:
+La idea actual del sistema es:
 
-- autenticacion de usuarios de asesoria
-- seleccion de empresa cliente
-- subida de documentos
-- seguimiento del procesamiento
-- bandeja de revision
-- aceptacion, rechazo y reproceso
+- mantener frontend y backend
+- desacoplar el motor documental
+- usar el backend como cliente del motor
+- no cerrar todavia la integracion con la base de datos final de cada empresa
 
-No cubre todavia:
+Este documento no intenta definir toda la API futura del producto final.
+Solo fija la API que sigue teniendo sentido en la fase actual.
 
-- asientos contables
-- contrapartidas
-- integraciones con ERP
+Documento rector:
+
+- ver `docs/motor-documental-desacoplado.md`
 
 ---
 
-## 2. Convenciones generales
+## 2. Principios
 
 - todos los endpoints de negocio cuelgan de `/api`
 - autenticacion mediante bearer token
-- todas las acciones quedan asociadas a la asesoria del usuario autenticado
-- el contexto de empresa cliente puede ir en el body o por ruta, segun el caso de uso
+- el backend no expone detalles internos del proveedor OCR
+- el backend expone documentos, jobs, revision y resultados normalizados
+- el motor documental se consume como servicio interno
 
 ---
 
-## 3. Endpoints de autenticacion
+## 3. Que debe hacer la API en esta fase
 
-## POST `/api/auth/login`
+La API de negocio debe cubrir:
 
-Inicia sesion de usuario de asesoria.
+- autenticacion
+- gestion de empresa activa
+- subida de documentos
+- consulta de documentos y jobs
+- reproceso
+- revision y validacion
+- consulta del resultado normalizado
 
-Body:
+La API no debe cerrar todavia:
 
-```json
-{
-  "email": "usuario@asesoria.com",
-  "password": "secret"
-}
-```
-
-Respuesta:
-
-```json
-{
-  "token": "jwt",
-  "user": {
-    "id": 1,
-    "nombre": "Laura",
-    "email": "usuario@asesoria.com",
-    "rol": "OPERADOR"
-  },
-  "advisory": {
-    "id": 3,
-    "nombre": "Asesoria Central"
-  }
-}
-```
-
-## GET `/api/auth/me`
-
-Devuelve el usuario autenticado y su contexto.
+- integracion ERP
+- escritura en la base de datos real de la empresa
+- asientos contables finales
 
 ---
 
-## 4. Endpoints de empresas cliente
+## 4. Endpoints de negocio que siguen vigentes
 
-## GET `/api/companies`
+## 4.1 Autenticacion
 
-Lista las empresas cliente disponibles para la asesoria.
+### POST `/api/auth/login`
 
-Respuesta:
+Inicia sesion.
 
-```json
-{
-  "data": [
-    {
-      "id": 12,
-      "nombre": "Empresa Demo SL",
-      "cif": "B12345678"
-    }
-  ]
-}
-```
+### GET `/api/auth/me`
+
+Devuelve usuario autenticado y contexto basico.
 
 ---
 
-## 5. Endpoints de documentos
+## 4.2 Empresas / contexto
 
-## POST `/api/documents/upload`
+### GET `/api/companies`
 
-Sube uno o varios documentos y crea un job por cada uno.
+Lista las empresas disponibles para el usuario o tenant actual.
 
-Request:
+La empresa activa puede viajar:
 
-- `multipart/form-data`
+- en cabecera
+- en query
+- en body
+
+La forma exacta puede ajustarse mas adelante, pero el concepto de `empresa activa` sigue vigente.
+
+---
+
+## 4.3 Documentos
+
+### POST `/api/documents/upload`
+
+Sube uno o varios documentos.
+
+Responsabilidad:
+
+- registrar metadata
+- guardar el original
+- crear un job por documento
+- devolver respuesta rapida sin esperar a la extraccion
+
+Campos esperados:
+
 - `company_id`
 - `files[]`
-- `channel` opcional: `web`, `mobile_camera`, `mobile_gallery`
+- `channel` opcional
 
-Respuesta:
+### GET `/api/documents`
 
-```json
-{
-  "success": true,
-  "batch_id": "upl_20260318_001",
-  "documents": [
-    {
-      "id": 101,
-      "estado": "en_cola"
-    },
-    {
-      "id": 102,
-      "estado": "en_cola"
-    }
-  ]
-}
-```
+Lista documentos.
 
-## GET `/api/documents`
-
-Lista documentos con filtros.
-
-Filtros previstos:
+Filtros esperados:
 
 - `company_id`
 - `status`
-- `from`
-- `to`
 - `search`
 - `page`
 - `limit`
 
-## GET `/api/documents/:id`
+### GET `/api/documents/:id`
 
-Devuelve detalle del documento:
+Devuelve el detalle del documento.
+
+Debe incluir, como minimo:
 
 - metadata
 - estado
-- resultado de extraccion mas reciente
-- duplicados
-- decision de revision si existe
+- ultimo job
+- resultado documental mas reciente
 
-## GET `/api/documents/:id/file`
+### GET `/api/documents/:id/file`
 
-Devuelve el archivo original para previsualizacion o descarga.
+Devuelve el archivo original.
 
-## GET `/api/documents/:id/jobs`
+### GET `/api/documents/:id/jobs`
 
-Devuelve el historial de jobs del documento.
+Devuelve historial de jobs.
 
-## POST `/api/documents/:id/reprocess`
+### POST `/api/documents/:id/reprocess`
 
-Vuelve a encolar el documento.
-
-Respuesta:
-
-```json
-{
-  "success": true,
-  "job_id": 9001,
-  "estado": "en_cola"
-}
-```
+Reencola el documento.
 
 ---
 
-## 6. Endpoints de bandeja de revision
+## 4.4 Revision
 
-## GET `/api/review-queue`
+### GET `/api/review-queue`
 
-Devuelve la bandeja de documentos pendientes de revision.
+Devuelve la bandeja de revision.
 
-Filtros previstos:
+### PATCH `/api/documents/:id/extraction`
 
-- `company_id`
-- `status`
-- `duplicate`
-- `page`
-- `limit`
+Permite corregir el resultado antes de validar.
 
-Estados utiles:
+No debe limitarse a campos simples.
+Debe aceptar el resultado normalizado o el subconjunto editable que decida la UI.
 
-- `pendiente_revision`
-- `procesado`
-- `error`
-- `rechazado`
+### POST `/api/documents/:id/accept`
 
-## PATCH `/api/documents/:id/extraction`
+Marca el documento como revisado/aceptado.
 
-Permite corregir manualmente los datos extraidos antes de decidir.
+### POST `/api/documents/:id/reject`
 
-Body ejemplo:
-
-```json
-{
-  "proveedor_detectado": "Proveedor Demo SL",
-  "numero_factura": "F-2026-001",
-  "fecha_factura": "2026-03-18",
-  "base_imponible": 100.0,
-  "impuesto": 21.0,
-  "total": 121.0
-}
-```
-
-## POST `/api/documents/:id/accept`
-
-Marca la captura como aceptada por la asesoria.
-
-Body opcional:
-
-```json
-{
-  "comentarios": "Datos revisados manualmente"
-}
-```
-
-## POST `/api/documents/:id/reject`
-
-Marca la captura como rechazada.
-
-Body:
-
-```json
-{
-  "motivo": "Documento ilegible"
-}
-```
+Marca el documento como rechazado.
 
 ---
 
-## 7. Endpoints de soporte operativo
+## 4.5 Operacion
 
-## GET `/api/dashboard/summary`
+### GET `/api/dashboard/summary`
 
-Resumen operativo basico:
+Resumen operativo.
 
-- documentos recibidos
-- en cola
-- procesando
-- pendientes de revision
-- rechazados
+### GET `/api/health`
 
-## GET `/api/health`
+Health check del backend.
 
-Health check del API principal.
+### GET `/worker/health`
 
-## GET `/worker/health`
-
-Health check del worker o del servicio de extraccion, si se expone por separado.
+Health check del worker o del motor interno, si se expone.
 
 ---
 
-## 8. Estados documentales recomendados
+## 5. Resultado documental que la API debe exponer
 
-Estados minimos:
+La API no debe exponer internals del OCR.
+
+Debe exponer el contrato estable del motor, o una adaptacion directa de ese contrato.
+
+El resultado documental debe incluir, como minimo:
+
+- `normalized_document`
+- `field_confidence`
+- `coverage`
+- `evidence`
+- `decision_flags`
+- `company_match`
+- `processing_trace`
+- `warnings`
+
+Relacion con:
+
+- `docs/motor-documental-desacoplado.md`
+- `docs/contrato-datos-documentales-y-contables.md`
+
+Compatibilidad temporal:
+
+- mientras dure el MVP, el backend puede seguir consumiendo campos legacy aplanados
+- cualquier contrato nuevo debe construirse sobre `normalized_document`
+- la adaptacion del contrato del motor al esquema actual del MVP debe vivir en una capa adaptadora propia del backend
+
+---
+
+## 5.1 Endpoint interno del motor
+
+Mientras el backend siga hablando con el `ai-service` por HTTP interno, la interfaz tecnica del motor queda asi:
+
+### POST `/ai/process`
+
+Entrada actual:
+
+- `file`
+- `mime_type`
+- `company_name`
+- `company_tax_id`
+
+Salida estable:
+
+- `contract`
+- `engine_request`
+- `normalized_document`
+- `document_input`
+- `field_confidence`
+- `coverage`
+- `evidence`
+- `decision_flags`
+- `company_match`
+- `processing_trace`
+- `warnings`
+- `raw_text`
+- `provider`
+- `method`
+- `pages`
+
+Compatibilidad temporal:
+
+- `legacy_data`
+- campos legacy aplanados en top-level
+
+Nota de implementacion actual:
+
+- el `ai-service` resuelve internamente un `ExtractionResult`
+- `/ai/process` solo serializa ese contrato y mantiene la compatibilidad temporal con el MVP
+
+---
+
+## 6. Estados que siguen teniendo sentido
+
+Estados utiles del documento:
 
 - `recibido`
 - `almacenado`
 - `en_cola`
 - `procesando`
-- `procesado`
 - `pendiente_revision`
 - `aceptado`
 - `rechazado`
 - `error`
 
----
+Estados del job:
 
-## 9. Contrato de datos minimo del resultado de extraccion
+- `pendiente`
+- `en_proceso`
+- `completado`
+- `error`
 
-El resultado de extraccion del MVP debe poder representar, como minimo:
-
-```json
-{
-  "proveedor_detectado": "Proveedor Demo SL",
-  "numero_factura": "F-2026-001",
-  "fecha_factura": "2026-03-18",
-  "base_imponible": 100.0,
-  "impuesto": 21.0,
-  "total": 121.0,
-  "moneda": "EUR",
-  "tipo_documento": "factura",
-  "confianza": 0.84,
-  "warnings": [
-    "possible_duplicate",
-    "tax_id_missing"
-  ]
-}
-```
+La nomenclatura concreta puede variar en la implementacion, pero el modelo funcional sigue siendo este.
 
 ---
 
-## 10. Lo que se deja para la fase contable
+## 7. Limites de esta fase
 
-No se definen aun endpoints para:
+Este documento no cierra todavia:
 
-- asientos
-- cuentas contables
-- contrapartidas
-- exportaciones a software contable
+- endpoints ERP
+- endpoints de asientos finales
+- endpoints de sincronizacion contable
+- endpoints de configuracion contable avanzada
 
-Esos contratos se definiran cuando la fase documental este estable.
+Eso se definira cuando el motor documental este estable y portable.

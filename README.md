@@ -36,7 +36,7 @@ Aplicacion web para subir facturas en PDF o imagen, extraer sus datos automatica
 
 ## Arranque rapido
 
-1. Copia `/.env.example` a `.env` en la raiz si vas a usar el proveedor local de IA.
+1. Revisa y ajusta `/.env` en la raiz segun tu entorno antes de levantar el stack.
 2. Levanta el stack de desarrollo actual:
 
 ```bash
@@ -63,10 +63,7 @@ docker compose --profile doc-ai-text down
 
 ## Credenciales de desarrollo
 
-Con la semilla actual:
-
-- Email: `admin@difactura.local`
-- Password: `Admin123!`
+Si recreas la base desde cero, usa los usuarios seed del entorno local definidos en la inicializacion de base de datos o crea los tuyos para desarrollo.
 
 ## Flujo funcional
 

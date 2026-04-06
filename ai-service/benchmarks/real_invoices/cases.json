@@ -1,6 +1,7 @@
 [
   {
     "id": "sale_multiline_igic",
+    "family": "sale_multiline_igic",
     "file": "files/sale_multiline_igic.jpg",
     "mime_type": "image/jpeg",
     "company_context": {
@@ -39,6 +40,7 @@
   },
   {
     "id": "sale_singleline_igic_person",
+    "family": "sale_singleline_person_nif",
     "file": "files/sale_singleline_igic_person.jpg",
     "mime_type": "image/jpeg",
     "company_context": {
@@ -74,6 +76,7 @@
   },
   {
     "id": "purchase_avast_single_unit",
+    "family": "purchase_supplier_single_unit",
     "file": "files/purchase_avast_single_unit.jpeg",
     "mime_type": "image/jpeg",
     "company_context": {
@@ -109,6 +112,7 @@
   },
   {
     "id": "purchase_avast_six_units",
+    "family": "purchase_supplier_multi_unit",
     "file": "files/purchase_avast_six_units.jpeg",
     "mime_type": "image/jpeg",
     "company_context": {
@@ -144,6 +148,7 @@
   },
   {
     "id": "purchase_consulting_with_irpf",
+    "family": "purchase_with_irpf",
     "file": "files/purchase_consulting_with_irpf.jpeg",
     "mime_type": "image/jpeg",
     "company_context": {
@@ -181,6 +186,7 @@
   },
   {
     "id": "rectificativa_negative",
+    "family": "rectificativa_negative",
     "file": "files/rectificativa_negative.jpeg",
     "mime_type": "image/jpeg",
     "company_context": {

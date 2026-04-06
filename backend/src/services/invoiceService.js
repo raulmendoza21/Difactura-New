@@ -136,7 +136,7 @@ async function getById(id) {
   const job = await invoiceRepo.findJobByFactura(id);
   const latestExtraction = await auditService.getLatestByFacturaAndAction(id, 'PROCESADA_IA');
 
-  const extraction = latestExtraction?.detalle_json
+  const extraction = shouldExposeLatestExtraction(job, latestExtraction)
     ? {
         provider: latestExtraction.detalle_json.provider || null,
         method: latestExtraction.detalle_json.method || null,
@@ -244,6 +244,7 @@ async function reprocess(id, userId, ip) {
   await invoiceRepo.update(id, {
     estado: INVOICE_STATES.SUBIDA,
     fecha_procesado: null,
+    confianza_ia: null,
   });
 
   const job = await invoiceRepo.createJob(id);
@@ -330,3 +331,27 @@ module.exports = {
   updateData,
   getStats,
 };
+
+function shouldExposeLatestExtraction(job, latestExtraction) {
+  if (!latestExtraction?.detalle_json) {
+    return false;
+  }
+
+  if (!job) {
+    return true;
+  }
+
+  const extractionJobId = Number(latestExtraction.detalle_json.job_id || 0);
+  if (extractionJobId && extractionJobId === Number(job.id)) {
+    return true;
+  }
+
+  const latestExtractionCreatedAt = latestExtraction.created_at ? new Date(latestExtraction.created_at) : null;
+  const latestJobCreatedAt = job.created_at ? new Date(job.created_at) : null;
+
+  if (!latestExtractionCreatedAt || !latestJobCreatedAt) {
+    return false;
+  }
+
+  return latestExtractionCreatedAt >= latestJobCreatedAt;
+}

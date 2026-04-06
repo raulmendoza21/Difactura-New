@@ -1,0 +1,376 @@
+{
+  "version": "2026-04-06",
+  "purpose": "Matriz canonica de familias documentales y variaciones a cubrir sin hardcodes por empresa o plantilla.",
+  "principles": [
+    "No usar nombres de empresa como condicion de runtime.",
+    "Cubrir familias documentales genericas y ejes de variacion.",
+    "Cada nueva correccion debe vincularse a una familia y a una variante.",
+    "Ninguna mejora se considera valida si rompe real_invoices o los sinteticos ya estables."
+  ],
+  "axes": {
+    "modality": [
+      "pdf_digital",
+      "pdf_scanned",
+      "pdf_photo",
+      "image_photo",
+      "ticket",
+      "multipage"
+    ],
+    "layout": [
+      "header_two_columns",
+      "shipping_billing",
+      "footer_supplier",
+      "label_value",
+      "tabular",
+      "sparse_visual_summary",
+      "ticket_vertical"
+    ],
+    "party": [
+      "company_vs_person",
+      "single_tax_id_visible",
+      "multiple_tax_ids_visible",
+      "supplier_only_in_footer",
+      "same_company_in_shipping_and_billing",
+      "invoice_number_looks_like_tax_id"
+    ],
+    "fiscal": [
+      "igic",
+      "iva",
+      "irpf",
+      "multiple_rates",
+      "tax_included",
+      "rectificative"
+    ],
+    "line_structure": [
+      "single",
+      "multiline",
+      "codes_and_serials",
+      "discount",
+      "page_break"
+    ],
+    "noise": [
+      "mojibake",
+      "blur",
+      "rotation",
+      "low_contrast",
+      "crop",
+      "jpeg_compression",
+      "shadow"
+    ]
+  },
+  "canonical_families": [
+    {
+      "family_id": "sale_visual_summary",
+      "priority": "high",
+      "goal": "Venta visual con resumen fiscal visible y empresa asociada como emisor.",
+      "typical_tags": [
+        "modality_photo_mobile",
+        "layout_sparse_visual_summary",
+        "fiscal_igic",
+        "line_multiline"
+      ],
+      "must_resolve": [
+        "issuer",
+        "recipient",
+        "invoice_number",
+        "issue_date",
+        "subtotal",
+        "tax_amount",
+        "total",
+        "line_items"
+      ],
+      "main_risks": [
+        "Logo o slogan promocionado como contraparte",
+        "Resumen fiscal en bloque visual aislado",
+        "Partes invertidas por score de cabecera"
+      ]
+    },
+    {
+      "family_id": "sale_header_two_columns_person",
+      "priority": "high",
+      "goal": "Venta con dos columnas en cabecera y cliente persona fisica.",
+      "typical_tags": [
+        "modality_photo_mobile",
+        "layout_header_two_columns",
+        "party_company_vs_person",
+        "party_single_tax_id_visible",
+        "fiscal_igic"
+      ],
+      "must_resolve": [
+        "issuer",
+        "recipient",
+        "invoice_number",
+        "issue_date",
+        "subtotal",
+        "tax_amount",
+        "total"
+      ],
+      "main_risks": [
+        "Persona fisica mal detectada por no tener razon social",
+        "Tax id personal confundido con telefono o referencia",
+        "Empresa asociada usada como cliente por sesgo"
+      ]
+    },
+    {
+      "family_id": "sale_tabular_company_person",
+      "priority": "medium",
+      "goal": "Venta tabular con una sola linea y cliente persona fisica.",
+      "typical_tags": [
+        "modality_pdf_digital",
+        "layout_tabular",
+        "party_company_vs_person",
+        "line_single",
+        "fiscal_igic"
+      ],
+      "must_resolve": [
+        "issuer",
+        "recipient",
+        "invoice_number",
+        "issue_date",
+        "line_items",
+        "total"
+      ],
+      "main_risks": [
+        "Cliente persona fisica recortado en tablas cortas",
+        "Linea unica perdida por cabecera tabular escasa"
+      ]
+    },
+    {
+      "family_id": "shipping_billing_purchase",
+      "priority": "high",
+      "goal": "Compra donde shipping y billing pertenecen a la empresa asociada y el proveedor real vive fuera de esos bloques.",
+      "typical_tags": [
+        "layout_shipping_billing",
+        "layout_footer_supplier",
+        "party_multiple_tax_ids_visible",
+        "party_supplier_only_in_footer",
+        "fiscal_igic"
+      ],
+      "must_resolve": [
+        "issuer",
+        "recipient",
+        "supplier_tax_id",
+        "invoice_number",
+        "issue_date",
+        "subtotal",
+        "tax_amount",
+        "total"
+      ],
+      "main_risks": [
+        "Billing de la empresa tratado como proveedor",
+        "Numero de factura promovido como tax id",
+        "Proveedor solo presente en pie legal"
+      ]
+    },
+    {
+      "family_id": "label_value_purchase",
+      "priority": "high",
+      "goal": "Factura compra en layout label-value clasico, con uno o varios tax ids visibles.",
+      "typical_tags": [
+        "modality_pdf_digital",
+        "layout_label_value",
+        "party_single_tax_id_visible",
+        "party_multiple_tax_ids_visible",
+        "fiscal_iva"
+      ],
+      "must_resolve": [
+        "issuer",
+        "recipient",
+        "invoice_number",
+        "issue_date",
+        "subtotal",
+        "tax_amount",
+        "total"
+      ],
+      "main_risks": [
+        "Confundir tax id de contacto con tax id de proveedor",
+        "Usar company_context como atajo y no como evidencia"
+      ]
+    },
+    {
+      "family_id": "purchase_with_irpf",
+      "priority": "high",
+      "goal": "Compra con retencion IRPF y posible proveedor persona fisica.",
+      "typical_tags": [
+        "layout_label_value",
+        "fiscal_iva",
+        "fiscal_irpf",
+        "party_company_vs_person"
+      ],
+      "must_resolve": [
+        "issuer",
+        "recipient",
+        "withholdings",
+        "subtotal",
+        "tax_amount",
+        "total"
+      ],
+      "main_risks": [
+        "Retencion confundida con impuesto",
+        "Proveedor persona fisica degradado a texto libre",
+        "Total matematico mal reconstruido"
+      ]
+    },
+    {
+      "family_id": "purchase_codes_serials",
+      "priority": "medium",
+      "goal": "Compra con codigos de articulo, seriales o licencias junto a la descripcion.",
+      "typical_tags": [
+        "layout_label_value",
+        "line_codes_and_serials",
+        "fiscal_iva"
+      ],
+      "must_resolve": [
+        "line_items",
+        "subtotal",
+        "tax_amount",
+        "total"
+      ],
+      "main_risks": [
+        "Codigos cortos tratados como lineas independientes",
+        "Seriales multiplicando lineas falsas",
+        "Descripcion principal truncada"
+      ]
+    },
+    {
+      "family_id": "purchase_tabular_discount",
+      "priority": "medium",
+      "goal": "Compra tabular con descuento explicito.",
+      "typical_tags": [
+        "layout_tabular",
+        "line_discount",
+        "fiscal_iva"
+      ],
+      "must_resolve": [
+        "line_items",
+        "subtotal",
+        "tax_amount",
+        "total"
+      ],
+      "main_risks": [
+        "Descuento ignorado",
+        "Precio unitario y subtotal intercambiados"
+      ]
+    },
+    {
+      "family_id": "multipage_purchase",
+      "priority": "medium",
+      "goal": "Factura compra multipagina con lineas en una pagina y totales en otra.",
+      "typical_tags": [
+        "modality_multipage",
+        "layout_label_value",
+        "line_page_break",
+        "fiscal_iva"
+      ],
+      "must_resolve": [
+        "invoice_number",
+        "issue_date",
+        "issuer",
+        "recipient",
+        "line_items",
+        "subtotal",
+        "tax_amount",
+        "total"
+      ],
+      "main_risks": [
+        "Perder lineas al cambiar de pagina",
+        "Tomar subtotales parciales como totales finales"
+      ]
+    },
+    {
+      "family_id": "ticket_simplified",
+      "priority": "high",
+      "goal": "Ticket o factura simplificada con proveedor en cabecera y resumen fiscal reducido.",
+      "typical_tags": [
+        "modality_ticket",
+        "layout_ticket_vertical",
+        "fiscal_tax_included"
+      ],
+      "must_resolve": [
+        "issuer",
+        "invoice_number",
+        "issue_date",
+        "total"
+      ],
+      "optional_fields": [
+        "recipient",
+        "recipient_tax_id",
+        "subtotal",
+        "tax_amount"
+      ],
+      "main_risks": [
+        "Inventar cliente",
+        "Promover telefono o referencia a tax id",
+        "Usar entregado/cambio como total fiscal"
+      ]
+    },
+    {
+      "family_id": "ticket_tax_breakdown",
+      "priority": "high",
+      "goal": "Ticket con base y cuota explicitas o impuesto incluido recuperable.",
+      "typical_tags": [
+        "modality_ticket",
+        "fiscal_tax_included",
+        "fiscal_igic"
+      ],
+      "must_resolve": [
+        "issuer",
+        "invoice_number",
+        "issue_date",
+        "subtotal",
+        "tax_amount",
+        "total"
+      ],
+      "main_risks": [
+        "Base y cuota omitidas por verticalidad",
+        "Porcentaje inferido desde una linea que no es fiscal"
+      ]
+    },
+    {
+      "family_id": "rectificativa_negative",
+      "priority": "high",
+      "goal": "Factura rectificativa con importes negativos y referencia a factura previa.",
+      "typical_tags": [
+        "fiscal_rectificative",
+        "fiscal_igic"
+      ],
+      "must_resolve": [
+        "document_type",
+        "rectified_invoice_number",
+        "subtotal",
+        "tax_amount",
+        "total"
+      ],
+      "main_risks": [
+        "Perder el signo negativo",
+        "Tratarla como factura completa normal",
+        "No enlazar referencia rectificada"
+      ]
+    },
+    {
+      "family_id": "visual_noise_variants",
+      "priority": "medium",
+      "goal": "Variantes visuales perturbadas sobre familias ya estables.",
+      "typical_tags": [
+        "noise_blur",
+        "noise_rotation",
+        "noise_low_contrast",
+        "noise_crop",
+        "noise_jpeg_compression",
+        "noise_shadow",
+        "noise_mojibake"
+      ],
+      "must_resolve": [
+        "family_stability",
+        "issuer",
+        "invoice_number",
+        "total"
+      ],
+      "main_risks": [
+        "Cambiar compra/venta por degradacion visual leve",
+        "Perder proveedor por ruido en cabecera",
+        "Romper tax ids por OCR agresivo"
+      ]
+    }
+  ]
+}

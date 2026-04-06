@@ -1,0 +1,12 @@
+FACTURA
+Numero de factura: PR-2026-044
+Fecha: 20/03/2026
+Proveedor: Suministros Ofimaticos Norte SL
+CIF proveedor: B33445566
+Representante fiscal: Ana Perez DNI 43888777H
+Cliente: Beta Tech Advisors SL
+CIF cliente: B99887766
+Contacto cliente: Laura Medina 44777888L
+Base imponible: 250,00
+IVA 21%: 52,50
+Total factura: 302,50

@@ -1,5 +1,6 @@
 import StatusPanel from '../common/StatusPanel';
 import { getTaxIdLabel, getTaxLabel } from '../../utils/invoicePresentation';
+import { getNormalizedWarningGroups, hasWarningGroup } from '../../utils/extractionWarnings';
 
 function isValidTaxId(value) {
   if (!value) return false;
@@ -20,7 +21,7 @@ function buildWarnings(invoice) {
   const taxIdLabel = getTaxIdLabel();
   const extractionWarnings = invoice.extraction?.warnings || [];
   const decisionFlags = invoice.extraction?.decision_flags || [];
-  const warningSet = new Set(extractionWarnings);
+  const warningGroups = getNormalizedWarningGroups(extractionWarnings);
   const base = toNumber(invoice.base_imponible);
   const tax = toNumber(invoice.iva_importe);
   const total = toNumber(invoice.total);
@@ -34,18 +35,14 @@ function buildWarnings(invoice) {
     base != null && tax != null && total != null && Math.abs(base + tax - total) <= 0.02;
   const linesMatchBase =
     Array.isArray(invoice.lineas) && invoice.lineas.length > 0 && base != null && Math.abs(lineSum - base) <= 0.02;
+  const documentType = invoice.extraction?.normalized_document?.classification?.document_type || '';
+  const isTicketLike = documentType === 'ticket' || documentType === 'factura_simplificada';
   const hasAutomaticCorrections =
-    warningSet.has('importes_corregidos_con_resumen_fallback')
-    || warningSet.has('lineas_corregidas_con_fallback')
-    || warningSet.has('lineas_enriquecidas_con_fallback')
-    || warningSet.has('lineas_completadas_con_fallback')
-    || extractionWarnings.some((code) => /^linea_\d+_/.test(code));
-  const hasTechnicalDiscrepancies =
-    warningSet.has('discrepancia_lineas')
-    || warningSet.has('discrepancia_total')
-    || warningSet.has('discrepancia_base_imponible')
-    || warningSet.has('discrepancia_iva_importe')
-    || warningSet.has('discrepancia_iva_porcentaje');
+    warningGroups.includes('amount_adjustment')
+    || warningGroups.includes('line_item_adjustment')
+    || warningGroups.includes('party_adjustment')
+    || warningGroups.includes('document_role_adjustment');
+  const hasTechnicalDiscrepancies = warningGroups.includes('source_discrepancy');
 
   decisionFlags.forEach((flag) => {
     if (!flag?.message) return;
@@ -62,10 +59,17 @@ function buildWarnings(invoice) {
     });
   }
 
-  if (warningSet.has('doc_ai_fallback')) {
+  if (hasWarningGroup(extractionWarnings, 'doc_ai_fallback')) {
     warnings.push({
       tone: 'warning',
-      text: 'La extraccion principal no estuvo disponible y se uso una via de respaldo. Conviene revisar el documento con mas atencion.',
+      text: 'La revision automatica necesitó una via complementaria para cerrar la lectura del documento. Conviene revisar los campos clave antes de validar.',
+    });
+  }
+
+  if (hasWarningGroup(extractionWarnings, 'doc_ai_fallback_error')) {
+    warnings.push({
+      tone: 'warning',
+      text: 'La via complementaria no estuvo disponible durante parte del proceso. Se ha mantenido la mejor lectura principal disponible.',
     });
   }
 
@@ -86,26 +90,26 @@ function buildWarnings(invoice) {
   if (!invoice.proveedor_nombre) {
     warnings.push({
       tone: 'warning',
-      text: 'Falta la contraparte del documento.',
+      text: 'Falta identificar la contraparte principal del documento.',
     });
   }
 
   if (!providerTaxId) {
     warnings.push({
       tone: 'info',
-      text: `No se ha detectado el ${taxIdLabel} de la contraparte.`,
+      text: `No se ha podido confirmar el ${taxIdLabel} de la contraparte.`,
     });
   } else if (!isValidTaxId(providerTaxId)) {
     warnings.push({
       tone: 'warning',
-      text: `El ${taxIdLabel} de la contraparte parece invalido: ${invoice.proveedor_cif}.`,
+      text: `El ${taxIdLabel} de la contraparte no se ha podido validar con suficiente fiabilidad: ${invoice.proveedor_cif}.`,
     });
   }
 
   if (companyTaxId && !isValidTaxId(companyTaxId)) {
     warnings.push({
       tone: 'info',
-      text: `El ${taxIdLabel} de la empresa asociada parece dudoso: ${invoice.cliente_cif}.`,
+      text: `El ${taxIdLabel} de la empresa asociada parece incompleto o poco fiable: ${invoice.cliente_cif}.`,
     });
   }
 
@@ -114,12 +118,12 @@ function buildWarnings(invoice) {
     if (delta > 0.02) {
       warnings.push({
         tone: 'warning',
-        text: `Los importes no cuadran: base (${base.toFixed(2)}) + ${taxLabel} (${tax.toFixed(2)}) no coincide con el total (${total.toFixed(2)}).`,
+        text: `Los importes no cuadran todavia: base (${base.toFixed(2)}) + ${taxLabel} (${tax.toFixed(2)}) no coincide con el total (${total.toFixed(2)}).`,
       });
     }
   }
 
-  if (Array.isArray(invoice.lineas) && invoice.lineas.length > 0 && base != null) {
+  if (!isTicketLike && Array.isArray(invoice.lineas) && invoice.lineas.length > 0 && base != null) {
     if (Math.abs(lineSum - base) > 0.02) {
       warnings.push({
         tone: 'warning',
@@ -131,25 +135,42 @@ function buildWarnings(invoice) {
   if (!invoice.lineas || invoice.lineas.length === 0) {
     warnings.push({
       tone: 'info',
-      text: 'No se han detectado lineas de factura. Puedes anadirlas manualmente si te hacen falta.',
+      text: 'No se han detectado lineas de detalle. Puedes completarlas manualmente si te hacen falta.',
     });
   }
 
   if (totalsAreCoherent && hasTechnicalDiscrepancies) {
     warnings.push({
       tone: 'info',
-      text: 'Los importes finales ya cuadran. El sistema ha comparado varias vias de extraccion y se ha quedado con la combinacion mas consistente.',
+      text: 'El documento presento diferencias entre lecturas alternativas, pero el resultado final ya se ha reconciliado con la opcion mas coherente.',
     });
   }
 
   if (linesMatchBase && hasAutomaticCorrections) {
     warnings.push({
       tone: 'info',
-      text: 'El detalle de lineas ya cuadra con la base imponible. Se han aplicado ajustes automaticos sobre la tabla detectada.',
+      text: 'Se han aplicado ajustes automaticos sobre el detalle del documento y el resultado final ya es coherente con los importes detectados.',
     });
   }
 
-  return warnings;
+  if (isTicketLike) {
+    warnings.push({
+      tone: 'info',
+      text: 'El documento se ha tratado como ticket o factura simplificada. En este tipo de justificantes es normal que algunos datos fiscales o del cliente no aparezcan completos.',
+    });
+  }
+
+  return dedupeWarnings(warnings);
+}
+
+function dedupeWarnings(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = `${item.tone}:${item.text}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export default function ReviewWarnings({ invoice }) {

@@ -1,4 +1,5 @@
 import StatusPanel from '../common/StatusPanel';
+import { getTechnicalWarningMessages } from '../../utils/extractionWarnings';
 
 const INPUT_KIND_LABELS = {
   pdf_digital: 'PDF digital',
@@ -12,54 +13,8 @@ const TEXT_SOURCE_LABELS = {
   ocr: 'OCR',
 };
 
-const TECHNICAL_WARNING_LABELS = {
-  doc_ai_fallback: 'Se uso una via de respaldo porque la extraccion principal no estuvo disponible.',
-  discrepancia_numero_factura: 'Hubo diferencias entre motores al leer el numero de factura.',
-  discrepancia_fecha: 'Hubo diferencias entre motores al leer la fecha.',
-  discrepancia_proveedor: 'Hubo diferencias entre motores al identificar el emisor.',
-  discrepancia_cif_proveedor: 'Hubo diferencias entre motores al identificar el NIF/CIF del emisor.',
-  discrepancia_cliente: 'Hubo diferencias entre motores al identificar el receptor.',
-  discrepancia_cif_cliente: 'Hubo diferencias entre motores al identificar el NIF/CIF del receptor.',
-  discrepancia_base_imponible: 'Hubo diferencias entre motores en la base imponible.',
-  discrepancia_iva_porcentaje: 'Hubo diferencias entre motores en el tipo impositivo.',
-  discrepancia_iva_importe: 'Hubo diferencias entre motores en la cuota del impuesto.',
-  discrepancia_total: 'Hubo diferencias entre motores en el total.',
-  discrepancia_lineas: 'Hubo diferencias entre motores en el detalle de lineas.',
-  importes_corregidos_con_resumen_fallback: 'Los importes finales se han apoyado en el resumen fiscal del documento.',
-  lineas_corregidas_con_fallback: 'El detalle de lineas se ha reordenado con ayuda de la via heuristica.',
-  lineas_enriquecidas_con_fallback: 'Se han completado lineas adicionales con la via heuristica.',
-  lineas_completadas_con_fallback: 'La via heuristica ha completado lineas que faltaban.',
-  lineas_inconsistentes_con_resumen_fiscal: 'El detalle de lineas no coincidia con el resumen fiscal del documento.',
-  base_recalculada_por_consistencia: 'La base imponible se ha recalculado por consistencia matematica.',
-  base_reconciliada_con_lineas: 'La base imponible se ha reconciliado con la suma de lineas.',
-  iva_recalculado_por_consistencia: 'La cuota del impuesto se ha recalculado por consistencia matematica.',
-  iva_recalculado_desde_porcentaje: 'La cuota del impuesto se ha recalculado a partir del porcentaje detectado.',
-  iva_porcentaje_corregido_por_texto_igic: 'El tipo impositivo se ha corregido usando referencias explicitas a IGIC en el documento.',
-  iva_porcentaje_corregido_por_texto_iva: 'El tipo impositivo se ha corregido usando referencias explicitas a IVA en el documento.',
-};
-
 function formatPercent(value) {
   return `${Math.round(value * 100)}%`;
-}
-
-function formatTechnicalWarnings(warnings = []) {
-  const normalizedItems = [];
-  const seen = new Set();
-
-  warnings.forEach((warningCode) => {
-    if (/^linea_\d+_/.test(warningCode)) {
-      warningCode = 'lineas_corregidas_con_fallback';
-    } else if (typeof warningCode === 'string' && warningCode.startsWith('doc_ai_fallback')) {
-      warningCode = 'doc_ai_fallback';
-    }
-
-    const message = TECHNICAL_WARNING_LABELS[warningCode];
-    if (!message || seen.has(message)) return;
-    seen.add(message);
-    normalizedItems.push(message);
-  });
-
-  return normalizedItems;
 }
 
 function formatCompanyMatch(companyMatch) {
@@ -82,8 +37,9 @@ export default function ExtractionInsights({ extraction }) {
   const inputKind = extraction.document_input?.input_kind;
   const textSource = extraction.document_input?.text_source;
   const provider = extraction.provider || extraction.normalized_document?.document_meta?.extraction_provider;
+  const documentType = extraction.normalized_document?.classification?.document_type || '';
   const missingFields = extraction.coverage?.missing_required_fields || [];
-  const technicalWarnings = formatTechnicalWarnings(extraction.warnings);
+  const technicalWarnings = getTechnicalWarningMessages(extraction.warnings);
   const companyMatchText = formatCompanyMatch(extraction.company_match);
   const confidence = typeof extraction.confianza === 'number'
     ? extraction.confianza
@@ -92,6 +48,9 @@ export default function ExtractionInsights({ extraction }) {
   const processingTrace = extraction.processing_trace || [];
 
   const items = [];
+  const optionalLowFields = documentType === 'ticket' || documentType === 'factura_simplificada'
+    ? new Set(['cliente', 'cif_cliente', 'base_imponible', 'iva_porcentaje', 'iva'])
+    : new Set();
 
   if (typeof confidence === 'number') {
     items.push(`Confianza general del documento: ${formatPercent(confidence)}.`);
@@ -114,7 +73,7 @@ export default function ExtractionInsights({ extraction }) {
   }
 
   const lowTechnicalFields = Object.entries(fieldConfidence)
-    .filter(([, value]) => typeof value === 'number' && value < 0.7)
+    .filter(([field, value]) => typeof value === 'number' && value < 0.7 && !optionalLowFields.has(field))
     .map(([field]) => field.replaceAll('_', ' '))
     .slice(0, 5);
 

@@ -1,13 +1,31 @@
 import logging
-import re
-from pathlib import Path
 
 import pytesseract
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image
 
 from app.config import settings
-from app.models.document_bundle import BoundingBox, DocumentSpan
-from app.utils.image_processing import build_ocr_variants
+from app.services.ocr_processing.availability import is_tesseract_available
+from app.services.ocr_processing.image_flow import (
+    extract_image_ocr,
+    extract_text_from_image,
+)
+from app.services.ocr_processing.paddle import extract_paddle_image_ocr, get_paddle_ocr
+from app.services.ocr_processing.pdf_flow import (
+    extract_pdf_ocr,
+    extract_text_from_pdf_pages,
+)
+from app.services.ocr_processing.region_hint_flow import extract_region_hints
+from app.services.ocr_processing.region_hints import (
+    cleanup_hint_text,
+    extract_image_region_hints,
+    extract_pdf_region_hints,
+    extract_region_hints_from_image,
+    is_region_hint_usable,
+    normalize_region_hint_text,
+    region_hint_bonus,
+)
+from app.services.ocr_processing.shared import OCR_CONFIGS, bbox_from_polygon, get_ocr_configs, is_fast_photo_result_usable, score_ocr_candidate
+from app.services.ocr_processing.tesseract import extract_best_text_from_variants, run_ocr_candidate
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +33,9 @@ pytesseract.pytesseract.tesseract_cmd = settings.tesseract_path
 
 
 class OCRService:
-    """OCR service using Tesseract and PaddleOCR for scanned documents."""
+    """OCR service facade with OCR-specific responsibilities delegated to submodules."""
 
-    OCR_CONFIGS = ("--oem 3 --psm 6", "--oem 3 --psm 4", "--oem 3 --psm 11")
+    OCR_CONFIGS = OCR_CONFIGS
 
     def __init__(self):
         self.language = settings.ocr_language
@@ -25,630 +43,67 @@ class OCRService:
         self._paddle_ocr_import_error = None
 
     def extract_text_from_image(self, image_path: str, input_kind: str = "image_scan") -> str:
-        return self.extract_image_ocr(image_path, input_kind=input_kind)["text"]
+        return extract_text_from_image(self, image_path, input_kind=input_kind)
 
     def extract_image_ocr(self, image_path: str, input_kind: str = "image_scan") -> dict:
-        path = Path(image_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Image not found: {image_path}")
-
-        paddle_result = None
-        if input_kind == "image_photo" and settings.paddle_ocr_enabled:
-            paddle_result = self._extract_paddle_image_ocr(image_path)
-            if self._is_fast_photo_result_usable(paddle_result):
-                paddle_result["page_entries"] = [
-                    {
-                        "page_number": 1,
-                        "width": float(paddle_result.get("image_width", 0)),
-                        "height": float(paddle_result.get("image_height", 0)),
-                        "text": paddle_result["text"],
-                        "spans": paddle_result.get("spans", []),
-                        "ocr_engine": paddle_result.get("ocr_engine", ""),
-                    }
-                ]
-                logger.info(
-                    "OCR extracted %s chars from %s using %s",
-                    len(paddle_result["text"]),
-                    path.name,
-                    paddle_result["variant_name"],
-                )
-                return paddle_result
-
-        with Image.open(image_path) as image:
-            tesseract_result = self._extract_best_text_from_variants(image, input_kind=input_kind)
-
-        candidates = [tesseract_result]
-        if paddle_result and paddle_result["text"]:
-            candidates.append(paddle_result)
-
-        result = max(candidates, key=lambda item: item["score"])
-        logger.info(
-            "OCR extracted %s chars from %s using %s",
-            len(result["text"]),
-            path.name,
-            result["variant_name"],
-        )
-        result["page_entries"] = [
-            {
-                "page_number": 1,
-                "width": float(result.get("image_width", 0)),
-                "height": float(result.get("image_height", 0)),
-                "text": result["text"],
-                "spans": result.get("spans", []),
-                "ocr_engine": result.get("ocr_engine", ""),
-            }
-        ]
-        return result
+        return extract_image_ocr(self, image_path, input_kind=input_kind)
 
     def extract_text_from_pdf_pages(self, file_path: str, input_kind: str = "pdf_scanned") -> str:
-        return self.extract_pdf_ocr(file_path, input_kind=input_kind)["text"]
+        return extract_text_from_pdf_pages(self, file_path, input_kind=input_kind)
 
     def extract_pdf_ocr(self, file_path: str, input_kind: str = "pdf_scanned") -> dict:
-        import fitz
-
-        doc = fitz.open(file_path)
-        all_text: list[str] = []
-        page_entries: list[dict] = []
-        preprocessing_steps = ["pdf_page_render"]
-        best_variant_name = ""
-
-        try:
-            for page_num, page in enumerate(doc):
-                mat = fitz.Matrix(300 / 72, 300 / 72)
-                pix = page.get_pixmap(matrix=mat)
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                result = self._extract_best_text_from_variants(img, input_kind=input_kind)
-
-                all_text.append(result["text"].strip())
-                page_entries.append(
-                    {
-                        "page_number": page_num + 1,
-                        "width": float(pix.width),
-                        "height": float(pix.height),
-                        "text": result["text"].strip(),
-                        "spans": [
-                            span.model_copy(update={"page": page_num + 1})
-                            for span in result.get("spans", [])
-                        ],
-                        "ocr_engine": result.get("ocr_engine", ""),
-                    }
-                )
-                for step in result["preprocessing_steps"]:
-                    if step not in preprocessing_steps:
-                        preprocessing_steps.append(step)
-                best_variant_name = result["variant_name"] or best_variant_name
-                logger.info(
-                    "OCR page %s: %s chars using %s",
-                    page_num + 1,
-                    len(result["text"]),
-                    result["variant_name"],
-                )
-        finally:
-            doc.close()
-
-        return {
-            "text": "\n\n".join(filter(None, all_text)).strip(),
-            "preprocessing_steps": preprocessing_steps,
-            "variant_name": best_variant_name,
-            "ocr_engine": "tesseract",
-            "page_entries": page_entries,
-        }
+        return extract_pdf_ocr(self, file_path, input_kind=input_kind)
 
     def extract_region_hints(self, file_path: str, input_kind: str = "pdf_scanned", max_pages: int = 1) -> list[dict]:
-        path = Path(file_path)
-        if not path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
-
-        if path.suffix.lower() == ".pdf":
-            return self._extract_pdf_region_hints(file_path, input_kind=input_kind, max_pages=max_pages)
-        return self._extract_image_region_hints(file_path, input_kind=input_kind)
+        return extract_region_hints(self, file_path, input_kind=input_kind, max_pages=max_pages)
 
     def is_available(self) -> bool:
-        try:
-            version = pytesseract.get_tesseract_version()
-            logger.info("Tesseract version: %s", version)
-            return True
-        except Exception:
-            logger.warning("Tesseract not available")
-            return False
+        return is_tesseract_available()
 
     def _extract_best_text_from_variants(self, image: Image.Image, input_kind: str) -> dict:
-        best_result = {
-            "text": "",
-            "score": float("-inf"),
-            "variant_name": "",
-            "preprocessing_steps": [],
-            "ocr_engine": "tesseract",
-            "spans": [],
-            "image_width": float(image.width),
-            "image_height": float(image.height),
-        }
-
-        for variant in build_ocr_variants(image, input_kind=input_kind):
-            for config in self._get_ocr_configs(input_kind):
-                text, confidences, spans = self._run_ocr_candidate(variant["image"], config)
-                score = self._score_ocr_candidate(text, confidences)
-                if score > best_result["score"]:
-                    best_result = {
-                        "text": text.strip(),
-                        "score": score,
-                        "variant_name": variant["name"],
-                        "preprocessing_steps": variant["preprocessing_steps"],
-                        "ocr_engine": "tesseract",
-                        "spans": spans,
-                        "image_width": float(variant["image"].width),
-                        "image_height": float(variant["image"].height),
-                    }
-
-        return best_result
+        return extract_best_text_from_variants(image, input_kind=input_kind, language=self.language)
 
     def _get_ocr_configs(self, input_kind: str) -> tuple[str, ...]:
-        if input_kind == "image_photo":
-            return ("--oem 3 --psm 6", "--oem 3 --psm 4")
-        return self.OCR_CONFIGS
+        return get_ocr_configs(input_kind)
 
     def _is_fast_photo_result_usable(self, result: dict | None) -> bool:
-        if not result or not result.get("text"):
-            return False
-
-        text = result["text"].strip()
-        if len(text) < 60:
-            return False
-
-        keyword_hits = sum(
-            1
-            for keyword in (
-                "factura",
-                "fecha",
-                "total",
-                "importe",
-                "base",
-                "igic",
-                "iva",
-                "documento",
-                "cliente",
-                "cif",
-                "nif",
-            )
-            if keyword in text.lower()
-        )
-        return result.get("score", float("-inf")) >= 140 and keyword_hits >= 3
+        return is_fast_photo_result_usable(result)
 
     def _extract_paddle_image_ocr(self, image_path: str) -> dict:
-        paddle_ocr = self._get_paddle_ocr()
-        if paddle_ocr is None:
-            return {
-                "text": "",
-                "score": float("-inf"),
-                "variant_name": "paddle_unavailable",
-                "preprocessing_steps": [],
-                "ocr_engine": "paddleocr",
-                "spans": [],
-            }
-
-        try:
-            pages = list(paddle_ocr.predict(image_path))
-        except Exception as exc:
-            logger.warning("PaddleOCR failed for %s: %s", image_path, exc)
-            return {
-                "text": "",
-                "score": float("-inf"),
-                "variant_name": "paddle_error",
-                "preprocessing_steps": [],
-                "ocr_engine": "paddleocr",
-                "spans": [],
-            }
-
-        if not pages:
-            return {
-                "text": "",
-                "score": float("-inf"),
-                "variant_name": "paddle_empty",
-                "preprocessing_steps": [],
-                "ocr_engine": "paddleocr",
-                "spans": [],
-            }
-
-        page = pages[0]
-        with Image.open(image_path) as image:
-            image_width = float(image.width)
-            image_height = float(image.height)
-        texts = [text.strip() for text in (page.get("rec_texts") or []) if str(text).strip()]
-        confidences = []
-        for value in page.get("rec_scores") or []:
-            try:
-                confidences.append(float(value) * 100.0)
-            except (TypeError, ValueError):
-                continue
-
-        text = "\n".join(texts)
-        polygons = page.get("rec_polys") or page.get("dt_polys") or []
-        spans: list[DocumentSpan] = []
-        for index, value in enumerate(texts):
-            bbox = self._bbox_from_polygon(polygons[index] if index < len(polygons) else None)
-            spans.append(
-                DocumentSpan(
-                    span_id=f"paddle:p1:b{index}:l0",
-                    page=1,
-                    text=value,
-                    bbox=bbox,
-                    source="ocr",
-                    engine="paddleocr",
-                    block_no=index,
-                    line_no=0,
-                    confidence=round((confidences[index] / 100.0), 2) if index < len(confidences) else None,
-                )
-            )
-        return {
-            "text": text,
-            "score": self._score_ocr_candidate(text, confidences),
-            "variant_name": "paddle_mobile_original",
-            "preprocessing_steps": [
-                "engine:paddleocr",
-                "source:original_image",
-                f"text_det_limit_side_len:{settings.paddle_text_det_limit_side_len}",
-            ],
-            "ocr_engine": "paddleocr",
-            "spans": spans,
-            "image_width": image_width,
-            "image_height": image_height,
-        }
+        return extract_paddle_image_ocr(self, image_path)
 
     def _get_paddle_ocr(self):
-        if not settings.paddle_ocr_enabled:
-            return None
-
-        if self._paddle_ocr is not None:
-            return self._paddle_ocr
-
-        if self._paddle_ocr_import_error is not None:
-            return None
-
-        try:
-            from paddleocr import PaddleOCR
-
-            self._paddle_ocr = PaddleOCR(
-                use_doc_orientation_classify=False,
-                use_doc_unwarping=False,
-                use_textline_orientation=False,
-                text_detection_model_name="PP-OCRv5_mobile_det",
-                text_recognition_model_name="latin_PP-OCRv5_mobile_rec",
-                text_det_limit_side_len=settings.paddle_text_det_limit_side_len,
-            )
-            return self._paddle_ocr
-        except Exception as exc:
-            self._paddle_ocr_import_error = exc
-            logger.warning("PaddleOCR unavailable, falling back to Tesseract: %s", exc)
-            return None
+        return get_paddle_ocr(self)
 
     def _extract_pdf_region_hints(self, file_path: str, *, input_kind: str, max_pages: int) -> list[dict]:
-        import fitz
-
-        hints: list[dict] = []
-        doc = fitz.open(file_path)
-        try:
-            for page_index in range(min(max_pages, len(doc))):
-                page = doc[page_index]
-                # Use a high-resolution render only for targeted rescue on hard scans.
-                pix = page.get_pixmap(matrix=fitz.Matrix(600 / 72, 600 / 72), alpha=False)
-                image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                hints.extend(
-                    self._extract_region_hints_from_image(
-                        image,
-                        page_number=page_index + 1,
-                        input_kind=input_kind,
-                    )
-                )
-        finally:
-            doc.close()
-        return hints
+        return extract_pdf_region_hints(self, file_path, input_kind=input_kind, max_pages=max_pages)
 
     def _extract_image_region_hints(self, image_path: str, *, input_kind: str) -> list[dict]:
-        with Image.open(image_path) as image:
-            rgb_image = image.convert("RGB")
-        return self._extract_region_hints_from_image(rgb_image, page_number=1, input_kind=input_kind)
+        return extract_image_region_hints(self, image_path, input_kind=input_kind)
 
     def _extract_region_hints_from_image(self, image: Image.Image, *, page_number: int, input_kind: str) -> list[dict]:
-        width, height = image.size
-        if width <= 0 or height <= 0:
-            return []
-
-        crop_specs = (
-            ("header", (0.0, 0.0, 1.0, 0.58)),
-            ("header_left", (0.0, 0.02, 0.52, 0.34)),
-            ("header_right", (0.45, 0.02, 1.0, 0.34)),
-            ("totals", (0.70, 0.72, 1.0, 1.0)),
-        )
-        hints: list[dict] = []
-
-        for region_type, ratios in crop_specs:
-            x0 = int(width * ratios[0])
-            y0 = int(height * ratios[1])
-            x1 = int(width * ratios[2])
-            y1 = int(height * ratios[3])
-            if x1 <= x0 or y1 <= y0:
-                continue
-
-            crop = image.crop((x0, y0, x1, y1))
-            text = self._extract_best_region_text(crop, region_type=region_type, input_kind=input_kind)
-            if not self._is_region_hint_usable(region_type, text):
-                continue
-
-            hints.append(
-                {
-                    "page_number": page_number,
-                    "region_type": region_type,
-                    "text": self._normalize_region_hint_text(region_type, text),
-                    "bbox": {
-                        "x0": float(x0),
-                        "y0": float(y0),
-                        "x1": float(x1),
-                        "y1": float(y1),
-                    },
-                }
-            )
-
-        return hints
-
-    def _extract_best_region_text(self, image: Image.Image, *, region_type: str, input_kind: str) -> str:
-        grayscale = image.convert("L")
-        variants = (
-            ("autocontrast", ImageOps.autocontrast(grayscale)),
-            (
-                "sharp_autocontrast",
-                ImageOps.autocontrast(grayscale.filter(ImageFilter.SHARPEN).filter(ImageFilter.SHARPEN)),
-            ),
-            ("equalize", ImageOps.equalize(grayscale)),
-        )
-        best_text = ""
-        best_score = float("-inf")
-
-        for _variant_name, variant_image in variants:
-            for config in self._get_region_hint_configs(region_type, input_kind=input_kind):
-                text, confidences, _ = self._run_ocr_candidate(variant_image, config)
-                score = self._score_ocr_candidate(text, confidences) + self._region_hint_bonus(region_type, text)
-                if score > best_score:
-                    best_score = score
-                    best_text = text
-
-        return self._cleanup_hint_text(best_text)
-
-    def _get_region_hint_configs(self, region_type: str, *, input_kind: str) -> tuple[str, ...]:
-        if region_type == "totals":
-            return (
-                "--oem 3 --psm 6",
-                "--oem 3 --psm 11",
-            )
-        if region_type in {"header_left", "header_right"}:
-            return (
-                "--oem 3 --psm 6",
-                "--oem 3 --psm 11",
-            )
-        return (
-            "--oem 3 --psm 6",
-            "--oem 3 --psm 11",
-        )
-
-    def _region_hint_bonus(self, region_type: str, text: str) -> float:
-        compact = " ".join((text or "").split()).upper()
-        if not compact:
-            return float("-inf")
-
-        amount_like_count = len(re.findall(r"-?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})|-?\d+(?:[.,]\d{2})", compact))
-        if region_type == "totals":
-            bonus = 0.0
-            if "SUBTOTAL" in compact:
-                bonus += 80
-            if "TOTAL" in compact or "TOT " in compact or compact.endswith("TOT"):
-                bonus += 100
-            if "IMPUEST" in compact or "IVA" in compact or "IGIC" in compact:
-                bonus += 80
-            bonus += amount_like_count * 45
-            return bonus
-
-        bonus = 0.0
-        for keyword in ("FACTURA", "RECTIFICAT", "DISOFT", "NIF", "CIF", "CLIENTE", "PROVEEDOR"):
-            if keyword in compact:
-                bonus += 35
-        bonus += amount_like_count * 8
-        return bonus
-
-    def _is_region_hint_usable(self, region_type: str, text: str) -> bool:
-        compact = " ".join((text or "").split())
-        if len(compact) < 18:
-            return False
-
-        upper = compact.upper()
-        amount_like_count = len(re.findall(r"-?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})|-?\d+(?:[.,]\d{2})", compact))
-        if region_type == "totals":
-            return amount_like_count >= 2 and any(
-                token in upper for token in ("SUBTOTAL", "TOTAL", "TOT ", "IMPUEST", "IVA", "IGIC")
-            )
-
-        keyword_hits = sum(
-            1
-            for keyword in ("FACTURA", "RECTIFICAT", "NIF", "CIF", "MAIL", "WEB", "SERVICIOS", "PALMAS")
-            if keyword in upper
-        )
-        return keyword_hits >= 1 or amount_like_count >= 2
+        return extract_region_hints_from_image(self, image, page_number=page_number, input_kind=input_kind)
 
     def _cleanup_hint_text(self, text: str) -> str:
-        lines = []
-        for raw_line in (text or "").splitlines():
-            line = re.sub(r"\s+", " ", raw_line).strip(" |")
-            if line:
-                lines.append(line)
-        return "\n".join(lines).strip()
+        return cleanup_hint_text(text)
 
     def _normalize_region_hint_text(self, region_type: str, text: str) -> str:
-        normalized = self._cleanup_hint_text(text)
-        if region_type == "totals":
-            normalized = re.sub(r"\bTOTA[!I1]\b", "TOTAL", normalized, flags=re.IGNORECASE)
-            normalized = re.sub(r"\bTOT\b", "TOTAL", normalized, flags=re.IGNORECASE)
-            normalized = re.sub(r"\bIMPUE(?:S|5)T(?:O|0)S\b", "IMPUESTOS", normalized, flags=re.IGNORECASE)
-        return normalized
+        return normalize_region_hint_text(region_type, text)
 
-    def _run_ocr_candidate(self, image: Image.Image, config: str) -> tuple[str, list[float], list[DocumentSpan]]:
-        text = pytesseract.image_to_string(
-            image,
-            lang=self.language,
-            config=config,
-        ).strip()
-        data = pytesseract.image_to_data(
-            image,
-            lang=self.language,
-            config=config,
-            output_type=pytesseract.Output.DICT,
-        )
+    def _region_hint_bonus(self, region_type: str, text: str) -> float:
+        return region_hint_bonus(region_type, text)
 
-        confidences: list[float] = []
-        line_map: dict[tuple[int, int], dict] = {}
-        for value in data.get("conf", []):
-            try:
-                numeric = float(value)
-            except (TypeError, ValueError):
-                continue
-            if numeric >= 0:
-                confidences.append(numeric)
+    def _is_region_hint_usable(self, region_type: str, text: str) -> bool:
+        return is_region_hint_usable(region_type, text)
 
-        total_items = len(data.get("text", []))
-        for index in range(total_items):
-            token = str(data.get("text", [""])[index] or "").strip()
-            if not token:
-                continue
-            try:
-                token_conf = float(data.get("conf", [0])[index])
-            except (TypeError, ValueError):
-                token_conf = -1
-            if token_conf < 0:
-                continue
+    def _run_ocr_candidate(self, image: Image.Image, config: str):
+        return run_ocr_candidate(image, config, language=self.language)
 
-            block_no = int(data.get("block_num", [0])[index] or 0)
-            line_no = int(data.get("line_num", [0])[index] or 0)
-            key = (block_no, line_no)
-            current = line_map.setdefault(
-                key,
-                {
-                    "texts": [],
-                    "x0": float(data.get("left", [0])[index]),
-                    "y0": float(data.get("top", [0])[index]),
-                    "x1": float(data.get("left", [0])[index]) + float(data.get("width", [0])[index]),
-                    "y1": float(data.get("top", [0])[index]) + float(data.get("height", [0])[index]),
-                    "confidences": [],
-                },
-            )
-            left = float(data.get("left", [0])[index])
-            top = float(data.get("top", [0])[index])
-            width = float(data.get("width", [0])[index])
-            height = float(data.get("height", [0])[index])
-            current["texts"].append(token)
-            current["x0"] = min(current["x0"], left)
-            current["y0"] = min(current["y0"], top)
-            current["x1"] = max(current["x1"], left + width)
-            current["y1"] = max(current["y1"], top + height)
-            current["confidences"].append(token_conf)
-
-        spans: list[DocumentSpan] = []
-        for (block_no, line_no), payload in sorted(line_map.items(), key=lambda item: (item[1]["y0"], item[1]["x0"])):
-            line_conf = 0.0
-            if payload["confidences"]:
-                line_conf = round((sum(payload["confidences"]) / len(payload["confidences"])) / 100.0, 2)
-            spans.append(
-                DocumentSpan(
-                    span_id=f"tesseract:p1:b{block_no}:l{line_no}",
-                    page=1,
-                    text=" ".join(payload["texts"]).strip(),
-                    bbox=BoundingBox.from_points(payload["x0"], payload["y0"], payload["x1"], payload["y1"]),
-                    source="ocr",
-                    engine="tesseract",
-                    block_no=block_no,
-                    line_no=line_no,
-                    confidence=line_conf,
-                )
-            )
-
-        return text, confidences, spans
-
-    def _bbox_from_polygon(self, polygon) -> BoundingBox:
-        if polygon is None:
-            return BoundingBox()
-        try:
-            points = [(float(point[0]), float(point[1])) for point in polygon]
-        except (TypeError, ValueError, IndexError):
-            return BoundingBox()
-        if not points:
-            return BoundingBox()
-        xs = [point[0] for point in points]
-        ys = [point[1] for point in points]
-        return BoundingBox.from_points(min(xs), min(ys), max(xs), max(ys))
+    def _bbox_from_polygon(self, polygon):
+        return bbox_from_polygon(polygon)
 
     def _score_ocr_candidate(self, text: str, confidences: list[float]) -> float:
-        if not text:
-            return float("-inf")
-
-        compact = text.replace("\n", " ").strip()
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        tokens = [token for token in compact.split() if token]
-
-        alnum = sum(ch.isalnum() for ch in compact)
-        digit_count = sum(ch.isdigit() for ch in compact)
-        line_count = max(1, len(lines))
-        word_count = len(tokens)
-        weird_char_count = sum(ch in {"ï¿½", "?", "|"} for ch in compact)
-        short_line_count = sum(len(line) <= 3 for line in lines)
-        short_line_ratio = short_line_count / line_count
-        short_token_count = sum(len(token.strip(".,:;()[]{}")) <= 2 for token in tokens)
-        short_token_ratio = short_token_count / max(1, word_count)
-        uppercase_word_count = sum(1 for token in tokens if len(token) > 2 and token.isupper())
-        avg_token_length = (
-            sum(len(token.strip(".,:;()[]{}")) for token in tokens) / max(1, word_count)
-        )
-        amount_like_count = len(re.findall(r"\b\d{1,4}[.,]\d{2}\b", compact))
-        keyword_bonus = sum(
-            20
-            for keyword in (
-                "factura",
-                "fecha",
-                "total",
-                "iva",
-                "igic",
-                "base",
-                "proveedor",
-                "cliente",
-                "importe",
-                "subtotal",
-                "documento",
-                "iban",
-                "nif",
-                "cif",
-            )
-            if keyword in compact.lower()
-        )
-
-        confidence_score = 0.0
-        if confidences:
-            avg_confidence = sum(confidences) / len(confidences)
-            confidence_score = avg_confidence * 1.2
-            if avg_confidence < 35:
-                confidence_score -= 40
-            elif avg_confidence > 65:
-                confidence_score += 20
-
-        return (
-            min(alnum, 900) * 0.35
-            + min(digit_count, 120) * 1.5
-            + min(line_count, 40) * 4
-            + min(word_count, 100) * 2
-            + amount_like_count * 14
-            + uppercase_word_count * 1.5
-            + keyword_bonus
-            + confidence_score
-            - weird_char_count * 10
-            - short_line_ratio * 180
-            - short_token_ratio * 140
-            - max(0, 3.0 - avg_token_length) * 50
-            - max(0, line_count - 80) * 4
-        )
+        return score_ocr_candidate(text, confidences)
 
 
 ocr_service = OCRService()

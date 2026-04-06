@@ -44,7 +44,7 @@ export default function LoginForm() {
           onChange={(e) => setEmail(e.target.value)}
           required
           className="input-field"
-          placeholder="admin@difactura.local"
+          placeholder="correo@empresa.com"
           autoComplete="email"
         />
       </div>

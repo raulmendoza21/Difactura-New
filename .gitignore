@@ -26,7 +26,6 @@ pnpm-debug.log*
 # Env and secrets
 .env
 .env.*
-!.env.example
 
 # Runtime data and local examples
 storage/

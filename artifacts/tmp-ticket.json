@@ -1,0 +1,142 @@
+{
+  "route": "configured",
+  "applied_overrides": {},
+  "cases_passed": 0,
+  "cases_total": 1,
+  "case_ratio": 0.0,
+  "checks_passed": 6,
+  "checks_total": 7,
+  "check_ratio": 0.8571,
+  "field_summary": [
+    {
+      "field": "legacy.numero_factura",
+      "passed": 0,
+      "total": 1,
+      "ratio": 0.0
+    },
+    {
+      "field": "legacy.base_imponible",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    },
+    {
+      "field": "legacy.cif_proveedor",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    },
+    {
+      "field": "legacy.iva",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    },
+    {
+      "field": "legacy.proveedor",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    },
+    {
+      "field": "legacy.total",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    },
+    {
+      "field": "normalized.classification.document_type",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    }
+  ],
+  "family_summary": [
+    {
+      "family": "ticket_tax_breakdown",
+      "cases_passed": 0,
+      "cases_total": 1,
+      "case_ratio": 0.0,
+      "checks_passed": 6,
+      "checks_total": 7,
+      "check_ratio": 0.8571
+    }
+  ],
+  "results": [
+    {
+      "id": "synthetic_ticket_vertical_payment_change",
+      "family": "ticket_tax_breakdown",
+      "ok": false,
+      "checks": [
+        {
+          "field": "legacy.numero_factura",
+          "ok": false,
+          "actual": "",
+          "expected": "T-2026-7781",
+          "family": "ticket_tax_breakdown"
+        },
+        {
+          "field": "legacy.cif_proveedor",
+          "ok": true,
+          "actual": "B76543210",
+          "expected": "B76543210",
+          "family": "ticket_tax_breakdown"
+        },
+        {
+          "field": "legacy.proveedor",
+          "ok": true,
+          "actual": "SUPERMERCADOS COSTA NORTE SL",
+          "expected": "contains:SUPERMERCADOS COSTA NORTE",
+          "family": "ticket_tax_breakdown"
+        },
+        {
+          "field": "legacy.base_imponible",
+          "ok": true,
+          "actual": 4.13,
+          "expected": 4.13,
+          "family": "ticket_tax_breakdown"
+        },
+        {
+          "field": "legacy.iva",
+          "ok": true,
+          "actual": 0.37,
+          "expected": 0.37,
+          "family": "ticket_tax_breakdown"
+        },
+        {
+          "field": "legacy.total",
+          "ok": true,
+          "actual": 4.5,
+          "expected": 4.5,
+          "family": "ticket_tax_breakdown"
+        },
+        {
+          "field": "normalized.classification.document_type",
+          "ok": true,
+          "actual": "factura_simplificada",
+          "expected": "factura_simplificada",
+          "family": "ticket_tax_breakdown"
+        }
+      ],
+      "mismatches": [
+        "legacy.numero_factura: esperado='T-2026-7781' real=''"
+      ],
+      "summary": {
+        "numero_factura": "",
+        "tipo_factura": "",
+        "fecha": "2026-04-04",
+        "proveedor": "SUPERMERCADOS COSTA NORTE SL",
+        "cliente": "",
+        "base_imponible": 4.13,
+        "iva_porcentaje": 8.96,
+        "iva": 0.37,
+        "retencion": 0.0,
+        "total": 4.5,
+        "confianza": 0.73,
+        "provider": "synthetic_text",
+        "input_provider": "synthetic_text",
+        "fallback_applied": false
+      }
+    }
+  ]
+}

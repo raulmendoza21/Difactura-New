@@ -1,0 +1,16 @@
+FACTURA
+Numero:
+14/2025
+Fecha:
+21/12/2025
+Base imponible
+15,000.00 EUR
+IGIC
+7.00%
+Cuota IGIC
+1,050.00 EUR
+Retencion I.R.P.F.
+15.00%
+2,250.00 EUR
+Total Factura
+13,800.00 EUR

@@ -1,0 +1,195 @@
+{
+  "route": "configured",
+  "applied_overrides": {},
+  "cases_passed": 0,
+  "cases_total": 1,
+  "case_ratio": 0.0,
+  "checks_passed": 9,
+  "checks_total": 11,
+  "check_ratio": 0.8182,
+  "field_summary": [
+    {
+      "field": "legacy.base_imponible",
+      "passed": 0,
+      "total": 1,
+      "ratio": 0.0
+    },
+    {
+      "field": "legacy.iva",
+      "passed": 0,
+      "total": 1,
+      "ratio": 0.0
+    },
+    {
+      "field": "legacy.cif_cliente",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    },
+    {
+      "field": "legacy.cif_proveedor",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    },
+    {
+      "field": "legacy.cliente",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    },
+    {
+      "field": "legacy.fecha",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    },
+    {
+      "field": "legacy.numero_factura",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    },
+    {
+      "field": "legacy.proveedor",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    },
+    {
+      "field": "legacy.tipo_factura",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    },
+    {
+      "field": "legacy.total",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    },
+    {
+      "field": "normalized.classification.document_type",
+      "passed": 1,
+      "total": 1,
+      "ratio": 1.0
+    }
+  ],
+  "family_summary": [
+    {
+      "family": "shipping_billing_purchase",
+      "cases_passed": 0,
+      "cases_total": 1,
+      "case_ratio": 0.0,
+      "checks_passed": 9,
+      "checks_total": 11,
+      "check_ratio": 0.8182
+    }
+  ],
+  "results": [
+    {
+      "id": "synthetic_purchase_pdf_photo_footer_supplier_shadow",
+      "family": "shipping_billing_purchase",
+      "ok": false,
+      "checks": [
+        {
+          "field": "legacy.numero_factura",
+          "ok": true,
+          "actual": "PR-4411",
+          "expected": "PR-4411",
+          "family": "shipping_billing_purchase"
+        },
+        {
+          "field": "legacy.tipo_factura",
+          "ok": true,
+          "actual": "compra",
+          "expected": "compra",
+          "family": "shipping_billing_purchase"
+        },
+        {
+          "field": "legacy.fecha",
+          "ok": true,
+          "actual": "2026-04-05",
+          "expected": "2026-04-05",
+          "family": "shipping_billing_purchase"
+        },
+        {
+          "field": "legacy.cif_proveedor",
+          "ok": true,
+          "actual": "B66778899",
+          "expected": "B66778899",
+          "family": "shipping_billing_purchase"
+        },
+        {
+          "field": "legacy.cif_cliente",
+          "ok": true,
+          "actual": "B22334455",
+          "expected": "B22334455",
+          "family": "shipping_billing_purchase"
+        },
+        {
+          "field": "legacy.proveedor",
+          "ok": true,
+          "actual": "COMERCIAL ATLANTICO INSULAR SL",
+          "expected": "contains:COMERCIAL ATLANTICO INSULAR",
+          "family": "shipping_billing_purchase"
+        },
+        {
+          "field": "legacy.cliente",
+          "ok": true,
+          "actual": "Alfa Digital Canarias SL",
+          "expected": "contains:ALFA DIGITAL CANARIAS",
+          "family": "shipping_billing_purchase"
+        },
+        {
+          "field": "legacy.base_imponible",
+          "ok": false,
+          "actual": 25.85,
+          "expected": 50.0,
+          "family": "shipping_billing_purchase"
+        },
+        {
+          "field": "legacy.iva",
+          "ok": false,
+          "actual": 27.65,
+          "expected": 3.5,
+          "family": "shipping_billing_purchase"
+        },
+        {
+          "field": "legacy.total",
+          "ok": true,
+          "actual": 53.5,
+          "expected": 53.5,
+          "family": "shipping_billing_purchase"
+        },
+        {
+          "field": "normalized.classification.document_type",
+          "ok": true,
+          "actual": "factura_completa",
+          "expected": "factura_completa",
+          "family": "shipping_billing_purchase"
+        }
+      ],
+      "mismatches": [
+        "legacy.base_imponible: esperado=50.0 real=25.85",
+        "legacy.iva: esperado=3.5 real=27.65"
+      ],
+      "summary": {
+        "numero_factura": "PR-4411",
+        "tipo_factura": "compra",
+        "fecha": "2026-04-05",
+        "proveedor": "COMERCIAL ATLANTICO INSULAR SL",
+        "cliente": "Alfa Digital Canarias SL",
+        "base_imponible": 25.85,
+        "iva_porcentaje": 107.0,
+        "iva": 27.65,
+        "retencion": 0.0,
+        "total": 53.5,
+        "confianza": 0.43,
+        "provider": "synthetic_text",
+        "input_provider": "synthetic_text",
+        "fallback_applied": false
+      }
+    }
+  ]
+}

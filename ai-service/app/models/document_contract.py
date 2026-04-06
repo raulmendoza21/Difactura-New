@@ -297,6 +297,10 @@ def build_normalized_document_from_invoice_data(
     due_date: str = "",
     payment_method: str = "",
     iban: str = "",
+    invoice_side: InvoiceSide | None = None,
+    operation_kind: OperationKind | None = None,
+    is_rectificative: bool | None = None,
+    is_simplified: bool | None = None,
     warnings: list[str] | None = None,
     raw_text_excerpt: str = "",
 ) -> NormalizedInvoiceDocument:
@@ -339,10 +343,14 @@ def build_normalized_document_from_invoice_data(
         ),
         classification=DocumentClassification(
             document_type=document_type,
-            invoice_side=_infer_invoice_side(invoice),
-            operation_kind=_infer_operation_kind(invoice),
-            is_rectificative=document_type in {"factura_rectificativa", "abono"},
-            is_simplified=document_type in {"factura_simplificada", "ticket"},
+            invoice_side=invoice_side or _infer_invoice_side(invoice),
+            operation_kind=operation_kind or _infer_operation_kind(invoice),
+            is_rectificative=(
+                is_rectificative if is_rectificative is not None else document_type in {"factura_rectificativa", "abono"}
+            ),
+            is_simplified=(
+                is_simplified if is_simplified is not None else document_type in {"factura_simplificada", "ticket"}
+            ),
         ),
         identity=InvoiceIdentity(
             invoice_number=invoice.numero_factura,

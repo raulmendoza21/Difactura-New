@@ -70,8 +70,8 @@ async def process_invoice(
                 "tax_id": company_tax_id,
             },
         )
-        raw_text = result["raw_text"]
-        data = result["data"]
+        raw_text = result.raw_text
+        data = result.data
         if not raw_text.strip() and not _has_extracted_content(data):
             raise HTTPException(
                 status_code=422,
@@ -81,31 +81,11 @@ async def process_invoice(
         logger.info(
             "Processing complete: %s, method=%s, provider=%s, confidence=%s",
             file.filename,
-            result["method"],
-            result["provider"],
+            result.method,
+            result.provider,
             data.confianza,
         )
-
-        return {
-            "success": result["success"],
-            **data.model_dump(),
-            "document_input": result["document_input"],
-            "field_confidence": result["field_confidence"],
-            "normalized_document": result["normalized_document"].model_dump(),
-            "coverage": result["coverage"].model_dump(),
-            "evidence": {
-                key: [item.model_dump() for item in items]
-                for key, items in (result.get("evidence") or {}).items()
-            },
-            "decision_flags": [item.model_dump() for item in result.get("decision_flags", [])],
-            "company_match": result.get("company_match") or None,
-            "processing_trace": [item.model_dump() for item in result.get("processing_trace", [])],
-            "raw_text": raw_text,
-            "method": result["method"],
-            "provider": result["provider"],
-            "pages": result["pages"],
-            "warnings": result["warnings"],
-        }
+        return result.to_api_payload()
     except HTTPException:
         raise
     except Exception as exc:
