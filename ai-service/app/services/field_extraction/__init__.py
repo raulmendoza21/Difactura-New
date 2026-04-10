@@ -1,1 +1,0 @@
-"""Modular field extraction helpers."""

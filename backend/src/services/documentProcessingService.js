@@ -41,27 +41,35 @@ async function processJob(job) {
       counterparty,
     } = documentEngineAdapter.adaptEngineResultToCurrentModel(engineResult, factura);
 
-    let proveedorId = null;
+    const newConfianza = Number(result.confianza) || 0;
+    const existingConfianza = Number(factura.confianza_ia) || 0;
+    const isRegression = newConfianza === 0 && existingConfianza > 0;
 
-    if (counterparty?.name || counterparty?.taxId) {
-      let proveedor = await supplierService.findOrCreateByCif(counterparty.name, counterparty.taxId);
-      if (documentEngineAdapter.shouldRefreshStoredCounterparty(proveedor, counterparty, factura)) {
-        proveedor = await supplierService.update(proveedor.id, {
-          nombre: counterparty.name,
-          cif: counterparty.taxId || proveedor.cif,
-        });
+    if (isRegression) {
+      await invoiceRepo.update(factura.id, { estado: INVOICE_STATES.PENDIENTE_REVISION });
+    } else {
+      let proveedorId = null;
+
+      if (counterparty?.name || counterparty?.taxId) {
+        let proveedor = await supplierService.findOrCreateByCif(counterparty.name, counterparty.taxId);
+        if (documentEngineAdapter.shouldRefreshStoredCounterparty(proveedor, counterparty, factura)) {
+          proveedor = await supplierService.update(proveedor.id, {
+            nombre: counterparty.name,
+            cif: counterparty.taxId || proveedor.cif,
+          });
+        }
+        proveedorId = proveedor.id;
       }
-      proveedorId = proveedor.id;
-    }
 
-    await invoiceRepo.update(
-      factura.id,
-      documentEngineAdapter.buildCurrentPersistencePayload(result, factura, proveedorId),
-    );
+      await invoiceRepo.update(
+        factura.id,
+        documentEngineAdapter.buildCurrentPersistencePayload(result, factura, proveedorId),
+      );
 
-    if (result.lineas && result.lineas.length > 0) {
-      await invoiceRepo.deleteLines(factura.id);
-      await invoiceRepo.createLines(factura.id, result.lineas);
+      if (result.lineas && result.lineas.length > 0) {
+        await invoiceRepo.deleteLines(factura.id);
+        await invoiceRepo.createLines(factura.id, result.lineas);
+      }
     }
 
     await invoiceRepo.updateJob(job.id, {
@@ -72,8 +80,11 @@ async function processJob(job) {
     await auditService.log({
       usuario_id: null,
       factura_id: factura.id,
-      accion: 'PROCESADA_IA',
-      detalle: documentEngineAdapter.buildCurrentAuditDetail(result, job.id, tipoFactura),
+      accion: isRegression ? 'EXTRACCION_DESCARTADA' : 'PROCESADA_IA',
+      detalle: {
+        ...documentEngineAdapter.buildCurrentAuditDetail(result, job.id, tipoFactura),
+        ...(isRegression ? { descarte_motivo: 'confianza_cero_con_datos_existentes', confianza_previa: existingConfianza } : {}),
+      },
     });
   } catch (error) {
     await invoiceRepo.update(factura.id, { estado: INVOICE_STATES.ERROR_PROCESAMIENTO });

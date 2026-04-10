@@ -14,12 +14,23 @@ const TEXT_SOURCE_LABELS = {
 };
 
 const PROVIDER_LABELS = {
+  mistral_ocr: 'Mistral OCR',
+  tesseract_ocr: 'OCR local (Tesseract)',
+  digital_text: 'Texto digital nativo',
+  none: 'Sin lectura disponible',
+  heuristic: 'Motor heuristico',
   doc_bundle: 'Motor documental',
-  doc_bundle_doc_ai_fallback: 'Motor documental + via complementaria selectiva',
-  heuristic: 'Motor documental',
+  doc_bundle_doc_ai_fallback: 'Motor documental + via complementaria',
   local: 'Lectura local',
   mistral: 'Mistral OCR',
   ollama: 'Via complementaria local',
+};
+
+const METHOD_LABELS = {
+  heuristic: 'Motor documental v2',
+  'heuristic+ai': 'Motor documental v2 + IA complementaria',
+  doc_bundle: 'Motor documental',
+  doc_bundle_doc_ai_fallback: 'Motor documental + via complementaria',
 };
 
 function formatPercent(value) {
@@ -46,10 +57,12 @@ export default function ExtractionInsights({ extraction }) {
   const inputKind = extraction.document_input?.input_kind;
   const textSource = extraction.document_input?.text_source;
   const provider = extraction.provider || extraction.normalized_document?.document_meta?.extraction_provider;
+  const method = extraction.method || extraction.normalized_document?.document_meta?.extraction_method;
   const documentType = extraction.normalized_document?.classification?.document_type || '';
   const missingFields = extraction.coverage?.missing_required_fields || [];
   const technicalWarnings = getTechnicalWarningMessages(extraction.warnings);
   const companyMatchText = formatCompanyMatch(extraction.company_match);
+  const operationSide = extraction.operation_side;
   const confidence = typeof extraction.confianza === 'number'
     ? extraction.confianza
     : extraction.normalized_document?.document_meta?.extraction_confidence;
@@ -65,16 +78,20 @@ export default function ExtractionInsights({ extraction }) {
     items.push(`Confianza general del documento: ${formatPercent(confidence)}.`);
   }
 
-  if (provider || inputKind || textSource) {
-    const channelBits = [
-      provider ? `Motor: ${PROVIDER_LABELS[provider] || provider}` : null,
-      inputKind ? `Entrada: ${INPUT_KIND_LABELS[inputKind] || inputKind}` : null,
-      textSource ? `Texto base: ${TEXT_SOURCE_LABELS[textSource] || textSource}` : null,
-    ].filter(Boolean);
+  const channelBits = [
+    provider ? `Fuente: ${PROVIDER_LABELS[provider] || provider}` : null,
+    method ? `Metodo: ${METHOD_LABELS[method] || method}` : null,
+    inputKind ? `Entrada: ${INPUT_KIND_LABELS[inputKind] || inputKind}` : null,
+    textSource ? `Texto base: ${TEXT_SOURCE_LABELS[textSource] || textSource}` : null,
+  ].filter(Boolean);
 
-    if (channelBits.length) {
-      items.push(channelBits.join(' | '));
-    }
+  if (channelBits.length) {
+    items.push(channelBits.join(' | '));
+  }
+
+  if (operationSide) {
+    const sideLabel = operationSide === 'venta' ? 'emitida (venta)' : operationSide === 'compra' ? 'recibida (compra)' : operationSide;
+    items.push(`Clasificacion automatica: factura ${sideLabel}.`);
   }
 
   if (missingFields.length > 0) {

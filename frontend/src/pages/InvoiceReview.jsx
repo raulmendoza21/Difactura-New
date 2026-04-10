@@ -10,7 +10,7 @@ import InvoicePreview from '../components/invoices/InvoicePreview';
 import ReviewWarnings from '../components/invoices/ReviewWarnings';
 import { getInvoiceById, rejectInvoice, reprocessInvoice, updateInvoice, validateInvoice } from '../services/invoiceService';
 import { formatCurrency } from '../utils/formatters';
-import { getTaxIdLabel, getTaxLabel } from '../utils/invoicePresentation';
+import { getTaxIdLabel, getTaxLabel, getTaxRegime } from '../utils/invoicePresentation';
 import { INVOICE_STATES } from '../utils/constants';
 
 const ACTIVE_PROCESSING_STATES = new Set([INVOICE_STATES.SUBIDA, INVOICE_STATES.EN_PROCESO]);
@@ -531,6 +531,7 @@ export default function InvoiceReview() {
               <InvoiceLineItems
                 lines={invoice?.lineas || []}
                 confidence={getExtractionFieldConfidence(invoice, 'lineas')}
+                taxRegime={getTaxRegime(invoice)}
               />
             </>
           ) : (

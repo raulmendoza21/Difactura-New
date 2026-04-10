@@ -1,1 +1,0 @@
-"""Identity extraction submodules."""

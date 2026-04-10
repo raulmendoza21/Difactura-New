@@ -10,6 +10,12 @@ function toNumeric(value) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
+function clampForDb(value, maxAbs) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.abs(n) > maxAbs ? null : n;
+}
+
 function partyFromResult(result, role) {
   const normalized = result?.normalized_document;
   if (role === 'issuer') {
@@ -120,7 +126,7 @@ function synchronizeExtractionWithBusinessContext(result, factura, tipoFactura, 
     (normalizedIssuer.name || normalizedIssuer.tax_id) && (normalizedRecipient.name || normalizedRecipient.tax_id)
   );
 
-  if (hasResolvedDocumentParties) {
+  if (hasResolvedDocumentParties && result.normalized_document._fromEngine) {
     patchNormalizedParty(result.normalized_document.issuer, issuerParty);
     patchNormalizedParty(result.normalized_document.recipient, recipientParty);
   } else {
@@ -166,6 +172,11 @@ function synchronizeExtractionWithBusinessContext(result, factura, tipoFactura, 
 }
 
 function inferInvoiceType(result, factura) {
+  const operationSide = result?.operation_side;
+  if (operationSide === 'venta' || operationSide === 'compra') {
+    return operationSide;
+  }
+
   const normalizedKind = result?.normalized_document?.classification?.operation_kind;
   if (normalizedKind === 'venta') {
     return 'venta';
@@ -204,7 +215,8 @@ function inferInvoiceType(result, factura) {
     return 'compra';
   }
 
-  return result?.tipo_factura || factura?.tipo || 'compra';
+  const fallback = result?.tipo_factura || factura?.tipo || 'compra';
+  return (fallback === 'compra' || fallback === 'venta') ? fallback : 'compra';
 }
 
 function resolveCounterparty(result, factura, tipoFactura) {
@@ -218,6 +230,11 @@ function resolveCounterparty(result, factura, tipoFactura) {
     if (!matchesLinkedCompany({ name: result?.cliente, taxId: result?.cif_cliente }, factura) && (result?.cliente || result?.cif_cliente)) {
       return { name: result?.cliente || '', taxId: result?.cif_cliente || '' };
     }
+    // Name-only fallback: when the model placed our NIF in the wrong field,
+    // the recipient matches our company by name but the issuer doesn't — use issuer.
+    if (issuer.name && !matchesLinkedCompany({ name: issuer.name, taxId: '' }, factura)) {
+      return { name: issuer.name, taxId: '' };
+    }
   }
 
   if (tipoFactura === 'compra') {
@@ -226,6 +243,11 @@ function resolveCounterparty(result, factura, tipoFactura) {
     }
     if (!matchesLinkedCompany({ name: result?.proveedor, taxId: result?.cif_proveedor }, factura) && (result?.proveedor || result?.cif_proveedor)) {
       return { name: result?.proveedor || '', taxId: result?.cif_proveedor || '' };
+    }
+    // Name-only fallback: when the issuer's NIF was swapped with ours but the name
+    // correctly identifies a different party, trust the name over the NIF.
+    if (issuer.name && !matchesLinkedCompany({ name: issuer.name, taxId: '' }, factura)) {
+      return { name: issuer.name, taxId: '' };
     }
   }
 
@@ -269,8 +291,78 @@ function shouldRefreshStoredCounterparty(existingSupplier, counterparty, factura
   return false;
 }
 
+function buildNormalizedDocumentFromFlat(result) {
+  const side = result.operation_side || '';
+  const invoiceSide = side === 'venta' ? 'emitida' : side === 'compra' ? 'recibida' : 'desconocida';
+  const operationKind = side || 'desconocida';
+  const tipo = result.document_type || result.tipo_factura || 'desconocido';
+  const subtotal = toNumeric(result.base_imponible);
+  const taxTotal = toNumeric(result.iva);
+  const total = toNumeric(result.total);
+  const withholdingTotal = Math.max(0, toNumeric(result.retencion));
+  const taxRate = toNumeric(result.iva_porcentaje);
+  const taxRegime = result.tax_regime || 'UNKNOWN';
+
+  const taxBreakdown = subtotal || taxTotal || total
+    ? [{ tax_regime: taxRegime, rate: taxRate, taxable_base: subtotal, tax_amount: taxTotal }]
+    : [];
+
+  const withholdings = withholdingTotal > 0
+    ? [{ withholding_type: 'IRPF', rate: toNumeric(result.retencion_porcentaje), taxable_base: subtotal, amount: withholdingTotal }]
+    : [];
+
+  return {
+    document_meta: {
+      extraction_provider: result.provider || '',
+      extraction_method: result.method || '',
+      extraction_confidence: result.confianza ?? 0,
+      warnings: result.warnings || [],
+    },
+    classification: {
+      document_type: tipo,
+      invoice_side: invoiceSide,
+      operation_kind: operationKind,
+      is_rectificative: String(tipo).includes('rectificativ'),
+      is_simplified: String(tipo).includes('simplificad') || String(tipo).includes('ticket'),
+    },
+    identity: {
+      invoice_number: result.numero_factura || '',
+      issue_date: result.fecha || '',
+      rectified_invoice_number: result.rectified_invoice_number || '',
+    },
+    issuer: {
+      name: result.proveedor || '',
+      legal_name: result.proveedor || '',
+      tax_id: result.cif_proveedor || '',
+    },
+    recipient: {
+      name: result.cliente || '',
+      legal_name: result.cliente || '',
+      tax_id: result.cif_cliente || '',
+    },
+    totals: {
+      subtotal,
+      tax_total: taxTotal,
+      withholding_total: withholdingTotal,
+      total,
+      amount_due: total,
+    },
+    tax_breakdown: taxBreakdown,
+    withholdings,
+    line_items: [],
+    payment_info: {},
+  };
+}
+
 function adaptEngineResultToCurrentModel(engineResult, factura) {
   const result = JSON.parse(JSON.stringify(engineResult || {}));
+
+  if (result.normalized_document) {
+    result.normalized_document._fromEngine = true;
+  } else {
+    result.normalized_document = buildNormalizedDocumentFromFlat(result);
+  }
+
   alignDetectedPartiesWithLinkedCompany(result, factura);
   const tipoFactura = inferInvoiceType(result, factura);
   result.tipo_factura = tipoFactura;
@@ -292,10 +384,10 @@ function buildCurrentPersistencePayload(result, factura, proveedorId) {
     fecha: result.fecha || null,
     proveedor_id: proveedorId,
     cliente_id: factura.cliente_id,
-    base_imponible: result.base_imponible || null,
-    iva_porcentaje: result.iva_porcentaje || null,
-    iva_importe: result.iva || null,
-    total: result.total || null,
+    base_imponible: clampForDb(result.base_imponible, 9999999999),
+    iva_porcentaje: clampForDb(result.iva_porcentaje, 999),
+    iva_importe: clampForDb(result.iva, 9999999999),
+    total: clampForDb(result.total, 9999999999),
     confianza_ia: result.confianza,
     estado: INVOICE_STATES.PENDIENTE_REVISION,
     fecha_procesado: new Date(),
@@ -320,6 +412,8 @@ function buildCurrentAuditDetail(result, jobId, tipoFactura) {
     processing_trace: result.processing_trace || [],
     contract: result.contract || null,
     engine_request: result.engine_request || null,
+    operation_side: result.operation_side || null,
+    tax_regime: result.tax_regime || null,
   };
 }
 

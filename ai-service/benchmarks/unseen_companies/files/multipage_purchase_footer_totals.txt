@@ -1,15 +1,0 @@
-FACTURA
-Numero de factura: PR-2026-009
-Fecha: 18/03/2026
-Proveedor: Servicios Nube Atlantico SL
-CIF: B44556677
-Cliente: Beta Consultoria SL
-CIF cliente: B87654321
-Descripcion
-Servicio de backup empresarial
-Suscripcion marzo 2026
-1 x 200,00
-
-Base imponible: 200,00
-IVA 21%: 42,00
-Total factura: 242,00

@@ -8,27 +8,23 @@ export default function InvoiceDetailCard({ invoice }) {
   if (!invoice) return null;
 
   const invoiceType = invoice.tipo?.toUpperCase?.() || invoice.tipo;
-  const rawConfidence = Number(invoice.confianza_ia);
-  const confidenceValue = Number.isFinite(rawConfidence) ? rawConfidence * 100 : null;
-  const taxPercent = invoice.iva_porcentaje != null ? `${invoice.iva_porcentaje}%` : '-';
+  const extractionConf = invoice.extraction?.confianza ?? invoice.extraction?.normalized_document?.document_meta?.extraction_confidence;
+  const rawConfidence = Number(invoice.confianza_ia ?? extractionConf);
+  const confidenceValue = Number.isFinite(rawConfidence) && rawConfidence > 0 ? rawConfidence * 100 : null;
   const taxLabel = getTaxLabel(invoice);
   const taxIdLabel = getTaxIdLabel();
   const fieldConfidence = invoice.extraction?.field_confidence || {};
   const withholding = invoice.extraction?.normalized_document?.withholdings?.[0] || null;
   const associatedCompany = invoice.empresa_asociada || null;
+  const taxBreakdown = invoice.extraction?.normalized_document?.tax_breakdown || [];
   const detectedIssuer = invoice.extraction?.normalized_document?.issuer || null;
   const detectedRecipient = invoice.extraction?.normalized_document?.recipient || null;
-  const evidence = invoice.extraction?.evidence || {};
+  const paymentInfo = invoice.extraction?.normalized_document?.payment_info || null;
+  const observaciones = invoice.extraction?.normalized_document?.observaciones || invoice.notas || null;
   const counterpartyConfidence =
     invoice.tipo === 'venta' ? fieldConfidence.cliente : fieldConfidence.proveedor;
   const counterpartyTaxConfidence =
     invoice.tipo === 'venta' ? fieldConfidence.cif_cliente : fieldConfidence.cif_proveedor;
-  const counterpartyField = invoice.tipo === 'venta' ? 'cliente' : 'proveedor';
-  const evidenceSummary = [
-    { label: 'Numero', items: evidence.numero_factura || [] },
-    { label: 'Contraparte', items: evidence[counterpartyField] || [] },
-    { label: 'Total', items: evidence.total || [] },
-  ].filter((entry) => Array.isArray(entry.items) && entry.items.length > 0);
 
   const fields = [
     { label: 'Numero', value: invoice.numero_factura || '-', confidence: fieldConfidence.numero_factura },
@@ -41,11 +37,27 @@ export default function InvoiceDetailCard({ invoice }) {
     { label: `${taxIdLabel} empresa`, value: associatedCompany?.cif || invoice.cliente_cif || '-' },
   ];
 
-  const amounts = [
+  // Build amounts: if there is a multi-rate breakdown use it, otherwise single line
+  const hasBreakdown = taxBreakdown.length > 1;
+  const amountsBase = [
     { label: 'Base imponible', value: formatCurrency(invoice.base_imponible), confidence: fieldConfidence.base_imponible },
-    { label: taxLabel, value: `${taxPercent} · ${formatCurrency(invoice.iva_importe)}`, confidence: fieldConfidence.iva },
-    { label: 'Total', value: formatCurrency(invoice.total), bold: true, confidence: fieldConfidence.total },
   ];
+  if (hasBreakdown) {
+    taxBreakdown.forEach((tb) => {
+      const regime = (tb.tax_regime || taxLabel || 'Impuesto').toUpperCase();
+      amountsBase.push({
+        label: `${regime} ${tb.rate != null ? tb.rate + '%' : ''}`.trim(),
+        value: `Base ${formatCurrency(tb.taxable_base)} · Cuota ${formatCurrency(tb.tax_amount)}`,
+        confidence: null,
+        isTax: true,
+      });
+    });
+  } else {
+    const taxPercent = invoice.iva_porcentaje != null ? `${invoice.iva_porcentaje}%` : '-';
+    amountsBase.push({ label: taxLabel, value: `${taxPercent} · ${formatCurrency(invoice.iva_importe)}`, confidence: fieldConfidence.iva });
+  }
+  amountsBase.push({ label: 'Total', value: formatCurrency(invoice.total), bold: true, confidence: fieldConfidence.total });
+  const amounts = amountsBase;
 
   if (withholding) {
     amounts.splice(2, 0, {
@@ -140,33 +152,49 @@ export default function InvoiceDetailCard({ invoice }) {
         </div>
       </div>
 
-      {evidenceSummary.length > 0 && (
-        <div className="p-5 bg-white">
-          <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Evidencia principal</h4>
-          <div className="space-y-3">
-            {evidenceSummary.map((entry) => {
-              const primary = entry.items.find((item) => item.source !== 'resolved') || entry.items[0];
-              return (
-                <div key={entry.label} className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs text-slate-400">{entry.label}</p>
-                    <p className="text-sm font-medium text-slate-700">{primary?.value || '-'}</p>
-                  </div>
-                  <div className="text-right text-xs text-slate-400">
-                    <p>{primary?.source || 'resolved'}</p>
-                    {primary?.page ? <p>Pag. {primary.page}</p> : null}
-                  </div>
-                </div>
-              );
-            })}
+      {invoice.notas && !observaciones && (
+        <div className="p-5">
+          <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Notas</h4>
+          <p className="text-sm text-slate-600">{invoice.notas}</p>
+        </div>
+      )}
+
+      {(paymentInfo?.forma_pago || paymentInfo?.cuenta_bancaria || paymentInfo?.fecha_vencimiento || paymentInfo?.condiciones_pago) && (
+        <div className="p-5">
+          <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Pago</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+            {paymentInfo.forma_pago && (
+              <div>
+                <dt className="text-xs text-slate-400">Forma de pago</dt>
+                <dd className="text-sm font-medium text-slate-700 mt-0.5 capitalize">{paymentInfo.forma_pago}</dd>
+              </div>
+            )}
+            {paymentInfo.condiciones_pago && (
+              <div>
+                <dt className="text-xs text-slate-400">Condiciones</dt>
+                <dd className="text-sm font-medium text-slate-700 mt-0.5">{paymentInfo.condiciones_pago}</dd>
+              </div>
+            )}
+            {paymentInfo.fecha_vencimiento && (
+              <div>
+                <dt className="text-xs text-slate-400">Vencimiento</dt>
+                <dd className="text-sm font-medium text-slate-700 mt-0.5">{formatDate(paymentInfo.fecha_vencimiento)}</dd>
+              </div>
+            )}
+            {paymentInfo.cuenta_bancaria && (
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-slate-400">IBAN</dt>
+                <dd className="text-sm font-mono font-medium text-slate-700 mt-0.5 tracking-wide">{paymentInfo.cuenta_bancaria}</dd>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {invoice.notas && (
+      {observaciones && (
         <div className="p-5">
-          <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Notas</h4>
-          <p className="text-sm text-slate-600">{invoice.notas}</p>
+          <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Observaciones</h4>
+          <p className="text-sm text-slate-600">{observaciones}</p>
         </div>
       )}
     </div>

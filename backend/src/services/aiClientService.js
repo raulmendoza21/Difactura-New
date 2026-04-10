@@ -28,6 +28,13 @@ async function processInvoice(filePath, mimeType, companyContext = {}) {
   form.append('company_name', companyContext.name || '');
   form.append('company_tax_id', companyContext.taxId || '');
 
+  // v2 engine uses company_tax_ids for deterministic side detection
+  const baseTaxIds = companyContext.taxIds || (companyContext.taxId ? [companyContext.taxId] : []);
+  const taxIds = [...new Set([...baseTaxIds, ...aiConfig.additionalTaxIds])];
+  if (taxIds.length > 0) {
+    form.append('company_tax_ids', JSON.stringify(taxIds));
+  }
+
   let lastError;
   const attempts = 1 + (aiConfig.retries || 0);
 
@@ -54,7 +61,7 @@ async function processInvoice(filePath, mimeType, companyContext = {}) {
 }
 
 async function healthCheck() {
-  const response = await axios.get(`${aiConfig.baseUrl}/ai/health`, {
+  const response = await axios.get(`${aiConfig.baseUrl}/health`, {
     timeout: 5000,
   });
   return response.data;

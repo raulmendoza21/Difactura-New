@@ -1,5 +1,6 @@
 export function getTaxRegime(invoice) {
   return (
+    invoice?.extraction?.tax_regime ||
     invoice?.extraction?.normalized_document?.tax_breakdown?.[0]?.tax_regime ||
     invoice?.extraction?.normalized_document?.classification?.tax_regime ||
     ''

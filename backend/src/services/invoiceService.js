@@ -151,6 +151,8 @@ async function getById(id) {
         decision_flags: latestExtraction.detalle_json.decision_flags || [],
         company_match: latestExtraction.detalle_json.company_match || null,
         processing_trace: latestExtraction.detalle_json.processing_trace || [],
+        operation_side: latestExtraction.detalle_json.operation_side || null,
+        tax_regime: latestExtraction.detalle_json.tax_regime || null,
         created_at: latestExtraction.created_at,
       }
     : null;
