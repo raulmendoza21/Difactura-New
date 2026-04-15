@@ -1,8 +1,6 @@
 const invoiceRepo = require('../repositories/invoiceRepository');
 const aiClient = require('./aiClientService');
 const auditService = require('./auditService');
-const supplierService = require('./supplierService');
-const documentEngineAdapter = require('./documentEngineAdapterService');
 const { INVOICE_STATES, JOB_STATES } = require('../utils/constants');
 const { NotFoundError } = require('../utils/errors');
 
@@ -24,53 +22,27 @@ async function processJob(job) {
       usuario_id: null,
       factura_id: factura.id,
       accion: 'PROCESAMIENTO_INICIADO',
-      detalle: {
-        job_id: job.id,
-        worker_id: job.worker_id,
-      },
+      detalle: { job_id: job.id, worker_id: job.worker_id },
     });
 
+    // Llamar al motor ai-service-vision
     const engineResult = await aiClient.processInvoice(document.ruta_storage, document.tipo_mime, {
       name: factura.cliente_nombre || '',
       taxId: factura.cliente_cif || '',
     });
 
-    const {
-      result,
-      tipoFactura,
-      counterparty,
-    } = documentEngineAdapter.adaptEngineResultToCurrentModel(engineResult, factura);
+    const confianza = Number(engineResult.confianza) || 0;
+    const nuevoEstado = confianza > 0
+      ? INVOICE_STATES.PROCESADA_IA
+      : INVOICE_STATES.PENDIENTE_REVISION;
 
-    const newConfianza = Number(result.confianza) || 0;
-    const existingConfianza = Number(factura.confianza_ia) || 0;
-    const isRegression = newConfianza === 0 && existingConfianza > 0;
-
-    if (isRegression) {
-      await invoiceRepo.update(factura.id, { estado: INVOICE_STATES.PENDIENTE_REVISION });
-    } else {
-      let proveedorId = null;
-
-      if (counterparty?.name || counterparty?.taxId) {
-        let proveedor = await supplierService.findOrCreateByCif(counterparty.name, counterparty.taxId);
-        if (documentEngineAdapter.shouldRefreshStoredCounterparty(proveedor, counterparty, factura)) {
-          proveedor = await supplierService.update(proveedor.id, {
-            nombre: counterparty.name,
-            cif: counterparty.taxId || proveedor.cif,
-          });
-        }
-        proveedorId = proveedor.id;
-      }
-
-      await invoiceRepo.update(
-        factura.id,
-        documentEngineAdapter.buildCurrentPersistencePayload(result, factura, proveedorId),
-      );
-
-      if (result.lineas && result.lineas.length > 0) {
-        await invoiceRepo.deleteLines(factura.id);
-        await invoiceRepo.createLines(factura.id, result.lineas);
-      }
-    }
+    // Guardar el JSON completo extraído por el motor
+    await invoiceRepo.update(factura.id, {
+      estado: nuevoEstado,
+      confianza_ia: confianza,
+      fecha_procesado: new Date(),
+      documento_json: engineResult,
+    });
 
     await invoiceRepo.updateJob(job.id, {
       estado: JOB_STATES.COMPLETADO,
@@ -80,10 +52,15 @@ async function processJob(job) {
     await auditService.log({
       usuario_id: null,
       factura_id: factura.id,
-      accion: isRegression ? 'EXTRACCION_DESCARTADA' : 'PROCESADA_IA',
+      accion: 'PROCESADA_IA',
       detalle: {
-        ...documentEngineAdapter.buildCurrentAuditDetail(result, job.id, tipoFactura),
-        ...(isRegression ? { descarte_motivo: 'confianza_cero_con_datos_existentes', confianza_previa: existingConfianza } : {}),
+        job_id: job.id,
+        confianza,
+        operation_side: engineResult.operation_side || null,
+        tipo_factura: engineResult.tipo_factura || engineResult.document_type || null,
+        numero_factura: engineResult.numero_factura || null,
+        provider: engineResult.provider || null,
+        pages: engineResult.pages || null,
       },
     });
   } catch (error) {
@@ -98,16 +75,11 @@ async function processJob(job) {
       usuario_id: null,
       factura_id: factura.id,
       accion: 'ERROR_PROCESAMIENTO',
-      detalle: {
-        job_id: job.id,
-        mensaje: error.message,
-      },
+      detalle: { job_id: job.id, mensaje: error.message },
     });
 
     throw error;
   }
 }
 
-module.exports = {
-  processJob,
-};
+module.exports = { processJob };

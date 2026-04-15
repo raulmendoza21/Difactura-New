@@ -3,8 +3,46 @@ DISOFT-NEW es el repositorio canonico de trabajo.
 Ruta:
 C:\Users\raule\Documents\DISOFT-NEW
 
-Comando recomendado para levantar el stack actual:
-docker compose --profile doc-ai-text up -d --build
+==============================
+COMANDOS DOCKER
+==============================
 
-Comando recomendado para apagarlo:
-docker compose --profile doc-ai-text down
+--- Encender todos los servicios ---
+docker compose up -d
+
+--- Encender servicios específicos ---
+docker compose up -d db backend frontend ai-service-vision
+
+--- Apagar todos los servicios ---
+docker compose down
+
+--- Apagar y limpiar (elimina redes huérfanas) ---
+docker compose down --remove-orphans
+
+--- Reiniciar un servicio ---
+docker compose restart ai-service-vision
+docker compose restart backend
+docker compose restart frontend
+docker compose restart db
+
+--- Reiniciar todos ---
+docker compose restart
+
+--- Buildear y encender todo ---
+docker compose up -d --build
+
+--- Buildear y encender un servicio específico ---
+docker compose build ai-service-vision; docker compose up -d ai-service-vision
+
+--- Ver estado de contenedores ---
+docker ps --format "{{.Names}}\t{{.Status}}"
+
+--- Ver logs de un servicio ---
+docker logs difactura-ai-vision --tail 50
+docker logs difactura-backend --tail 50
+docker logs difactura-frontend --tail 50
+docker logs difactura-db --tail 50
+
+--- Logs en tiempo real ---
+docker logs -f difactura-ai-vision
+

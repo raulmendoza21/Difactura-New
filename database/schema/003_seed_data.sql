@@ -36,4 +36,4 @@ INSERT INTO proveedores (nombre, nombre_normalizado, cif, direccion, email, tele
 
 -- Empresa cliente base
 INSERT INTO clientes (asesoria_id, nombre, nombre_normalizado, cif, direccion, email, telefono, estado) VALUES
-(1, 'Empresa Cliente Demo SL', 'EMPRESA CLIENTE DEMO', 'B44556622', 'Calle Ejemplo 15, Las Palmas de Gran Canaria', 'administracion@cliente-demo.test', '928000000', 'ACTIVA');
+(1, 'Disoft Servicios SL', 'DISOFT', 'B35222249', 'Calle Ejemplo 15, Las Palmas de Gran Canaria', 'administracion@cliente-demo.test', '928000000', 'ACTIVA');

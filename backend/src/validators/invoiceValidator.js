@@ -2,45 +2,10 @@ const { ValidationError } = require('../utils/errors');
 const { INVOICE_STATES } = require('../utils/constants');
 
 function validateInvoiceUpdate(req, res, next) {
-  const { tipo, fecha, base_imponible, iva_porcentaje, iva_importe, total, lineas } = req.body;
+  const { documento_json } = req.body;
 
-  if (tipo && !['compra', 'venta'].includes(tipo)) {
-    return next(new ValidationError('Tipo debe ser "compra" o "venta"'));
-  }
-
-  if (fecha && isNaN(Date.parse(fecha))) {
-    return next(new ValidationError('Formato de fecha invalido'));
-  }
-
-  const numericFields = { base_imponible, iva_porcentaje, iva_importe, total };
-  for (const [field, value] of Object.entries(numericFields)) {
-    if (value !== undefined && value !== null && (isNaN(value) || value < 0)) {
-      return next(new ValidationError(`${field} debe ser un numero positivo`));
-    }
-  }
-
-  if (lineas !== undefined) {
-    if (!Array.isArray(lineas)) {
-      return next(new ValidationError('lineas debe ser un array'));
-    }
-
-    for (const [index, line] of lineas.entries()) {
-      if (!line || typeof line !== 'object') {
-        return next(new ValidationError(`linea ${index + 1} invalida`));
-      }
-
-      const numericLineFields = {
-        cantidad: line.cantidad,
-        precio_unitario: line.precio_unitario,
-        importe: line.importe ?? line.subtotal,
-      };
-
-      for (const [field, value] of Object.entries(numericLineFields)) {
-        if (value !== undefined && value !== null && (isNaN(value) || value < 0)) {
-          return next(new ValidationError(`linea ${index + 1}: ${field} debe ser un numero positivo`));
-        }
-      }
-    }
+  if (documento_json !== undefined && (typeof documento_json !== 'object' || documento_json === null || Array.isArray(documento_json))) {
+    return next(new ValidationError('documento_json debe ser un objeto JSON válido'));
   }
 
   next();
@@ -62,3 +27,4 @@ function validateStateTransition(req, res, next) {
 }
 
 module.exports = { validateInvoiceUpdate, validateStateTransition };
+

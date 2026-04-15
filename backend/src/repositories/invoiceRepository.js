@@ -44,10 +44,14 @@ function mapInvoiceListRow(row) {
   };
 }
 
+// Extrae campos del JSON para búsqueda/ordenación sin perder el blob completo
+function jsonField(key) {
+  return `f.documento_json->>'${key}'`;
+}
+
 async function findAll({
   asesoriaId,
   estado,
-  tipo,
   companyId,
   channel,
   batchId,
@@ -59,7 +63,6 @@ async function findAll({
 } = {}) {
   const baseFrom = `
     FROM facturas f
-    LEFT JOIN proveedores p ON f.proveedor_id = p.id
     LEFT JOIN clientes c ON f.cliente_id = c.id
     LEFT JOIN LATERAL (
       SELECT pj.*
@@ -79,12 +82,13 @@ async function findAll({
   const conditions = [];
   const params = [];
   let paramIndex = 1;
+
   const sortByMap = {
     created_at: 'f.created_at',
     fecha_procesado: 'f.fecha_procesado',
-    fecha_factura: 'f.fecha',
-    total: 'f.total',
-    proveedor: 'p.nombre',
+    fecha_factura: `(f.documento_json->>'fecha')`,
+    total: `(f.documento_json->>'total')::numeric`,
+    proveedor: `(f.documento_json->>'proveedor')`,
     cliente: 'c.nombre',
     fecha_subida: 'latest_document.fecha_subida',
   };
@@ -93,14 +97,9 @@ async function findAll({
     conditions.push(`c.asesoria_id = $${paramIndex++}`);
     params.push(asesoriaId);
   }
-
   if (estado) {
     conditions.push(`f.estado = $${paramIndex++}`);
     params.push(estado);
-  }
-  if (tipo) {
-    conditions.push(`f.tipo = $${paramIndex++}`);
-    params.push(tipo);
   }
   if (companyId) {
     conditions.push(`f.cliente_id = $${paramIndex++}`);
@@ -116,8 +115,8 @@ async function findAll({
   }
   if (search) {
     conditions.push(`(
-      COALESCE(f.numero_factura, '') ILIKE $${paramIndex}
-      OR COALESCE(p.nombre, '') ILIKE $${paramIndex}
+      COALESCE(f.documento_json->>'numero_factura', '') ILIKE $${paramIndex}
+      OR COALESCE(f.documento_json->>'proveedor', '') ILIKE $${paramIndex}
       OR COALESCE(c.nombre, '') ILIKE $${paramIndex}
       OR COALESCE(latest_document.nombre_archivo, '') ILIKE $${paramIndex}
       OR COALESCE(latest_document.batch_id, '') ILIKE $${paramIndex}
@@ -136,7 +135,6 @@ async function findAll({
 
   const result = await db.query(
     `SELECT f.*,
-            p.nombre AS proveedor_nombre, p.cif AS proveedor_cif,
             c.nombre AS cliente_nombre, c.cif AS cliente_cif,
             latest_job.id AS job_id,
             latest_job.estado AS job_estado,
@@ -164,11 +162,9 @@ async function findAll({
 async function findById(id) {
   const result = await db.query(
     `SELECT f.*,
-            p.nombre AS proveedor_nombre, p.cif AS proveedor_cif,
             c.nombre AS cliente_nombre, c.cif AS cliente_cif,
             u.nombre AS validado_por_nombre
      FROM facturas f
-     LEFT JOIN proveedores p ON f.proveedor_id = p.id
      LEFT JOIN clientes c ON f.cliente_id = c.id
      LEFT JOIN usuarios u ON f.validado_por = u.id
      WHERE f.id = $1`,
@@ -179,13 +175,10 @@ async function findById(id) {
 
 async function create(data) {
   const result = await db.query(
-    `INSERT INTO facturas (numero_factura, tipo, fecha, proveedor_id, cliente_id,
-     base_imponible, iva_porcentaje, iva_importe, total, estado, confianza_ia, notas)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `INSERT INTO facturas (estado, cliente_id, confianza_ia)
+     VALUES ($1, $2, $3)
      RETURNING *`,
-    [data.numero_factura, data.tipo, data.fecha, data.proveedor_id, data.cliente_id,
-     data.base_imponible, data.iva_porcentaje, data.iva_importe, data.total,
-     data.estado || 'SUBIDA', data.confianza_ia, data.notas]
+    [data.estado || 'SUBIDA', data.cliente_id || null, data.confianza_ia || null]
   );
   return result.rows[0];
 }
@@ -196,15 +189,18 @@ async function update(id, data) {
   let paramIndex = 1;
 
   const allowedFields = [
-    'numero_factura', 'tipo', 'fecha', 'proveedor_id', 'cliente_id',
-    'base_imponible', 'iva_porcentaje', 'iva_importe', 'total',
-    'estado', 'confianza_ia', 'validado_por', 'fecha_procesado', 'notas'
+    'estado', 'confianza_ia', 'validado_por', 'fecha_procesado', 'documento_json',
   ];
 
   for (const field of allowedFields) {
     if (data[field] !== undefined) {
-      fields.push(`${field} = $${paramIndex++}`);
-      params.push(data[field]);
+      if (field === 'documento_json') {
+        fields.push(`${field} = $${paramIndex++}`);
+        params.push(typeof data[field] === 'string' ? data[field] : JSON.stringify(data[field]));
+      } else {
+        fields.push(`${field} = $${paramIndex++}`);
+        params.push(data[field]);
+      }
     }
   }
 
@@ -216,39 +212,6 @@ async function update(id, data) {
     params
   );
   return result.rows[0] || null;
-}
-
-async function findLines(facturaId) {
-  const result = await db.query(
-    'SELECT * FROM factura_lineas WHERE factura_id = $1 ORDER BY orden',
-    [facturaId]
-  );
-  return result.rows;
-}
-
-async function createLines(facturaId, lines) {
-  if (!lines || lines.length === 0) return [];
-
-  const values = [];
-  const params = [];
-  let paramIndex = 1;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    values.push(`($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`);
-    params.push(facturaId, line.descripcion, line.cantidad || 1, line.precio_unitario || 0, line.importe || line.subtotal || 0, i + 1);
-  }
-
-  const result = await db.query(
-    `INSERT INTO factura_lineas (factura_id, descripcion, cantidad, precio_unitario, subtotal, orden)
-     VALUES ${values.join(', ')} RETURNING *`,
-    params
-  );
-  return result.rows;
-}
-
-async function deleteLines(facturaId) {
-  await db.query('DELETE FROM factura_lineas WHERE factura_id = $1', [facturaId]);
 }
 
 async function findDocument(facturaId) {
@@ -482,9 +445,6 @@ module.exports = {
   findById,
   create,
   update,
-  findLines,
-  createLines,
-  deleteLines,
   findDocument,
   findDocumentById,
   createDocument,

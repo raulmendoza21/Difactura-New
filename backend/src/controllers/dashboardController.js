@@ -11,12 +11,14 @@ async function getStats(req, res, next) {
     const recentActivity = await auditService.getRecent(10);
 
     const totalFacturas = estados.reduce((sum, e) => sum + e.count, 0);
+    const procesadasIa = estados.find((e) => e.estado === 'PROCESADA_IA');
     const pendientes = estados.find((e) => e.estado === 'PENDIENTE_REVISION');
     const validadas = estados.find((e) => e.estado === 'VALIDADA');
     const errores = estados.find((e) => e.estado === 'ERROR_PROCESAMIENTO');
 
     res.json({
       total: totalFacturas,
+      procesadas_ia: procesadasIa ? procesadasIa.count : 0,
       pendientes_revision: pendientes ? pendientes.count : 0,
       validadas: validadas ? validadas.count : 0,
       errores: errores ? errores.count : 0,

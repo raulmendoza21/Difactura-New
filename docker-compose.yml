@@ -188,13 +188,13 @@ services:
       OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-120}
       MAX_FILE_SIZE_MB: 50
       MAX_PAGES: 8
-      IMAGE_DPI: 150
+      IMAGE_DPI: 300
     ports:
       - "8001:8001"
     volumes:
       - ./ai-service-vision/app:/app/app
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\" || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

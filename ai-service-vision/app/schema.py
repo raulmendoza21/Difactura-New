@@ -87,42 +87,52 @@ class InvoiceResult(BaseModel):
 
 # ── JSON schema string that goes into the prompt ───────────────────────────────
 INVOICE_SCHEMA_PROMPT = """\
-Devuelve ÚNICAMENTE un objeto JSON válido con exactamente esta estructura.
-Para campos desconocidos usa null (números) o "" (cadenas). No inventes datos.
+Analiza la factura y devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta.
+Para campos no visibles en el documento: null (numéricos) o "" (texto). No inventes datos.
+
+INSTRUCCIÓN CADENA-DE-PENSAMIENTO — el campo "_razonamiento" es OBLIGATORIO y debe \
+rellenarse ANTES que cualquier otro campo con exactamente estos cuatro puntos:
+  "1.Nº: etiqueta=<etiqueta exacta vista>, valor=<valor>.
+   2.Fecha: etiqueta=<etiqueta exacta vista>, valor=<YYYY-MM-DD>.
+   3.Impuestos: <N> fila(s) → [base=X tipo=Y% cuota=Z] (una entrada por fila).
+   4.Líneas: <N> fila(s). Columnas: [col1, col2, ...]. Verificación: \
+línea1 importe=cant×precio ✓/✗, línea2 ... (al menos 3 primeras)."
 
 {
-  "numero_factura": "número de factura",
-  "numero_factura_rectificada": "número factura rectificada (solo si es rectificativa)",
-  "serie": "serie de la factura si la hay",
+  "_razonamiento": "1.Nº: etiqueta=..., valor=... 2.Fecha: etiqueta=..., valor=... 3.Impuestos: N fila(s) → [base=X tipo=Y% cuota=Z] ... 4.Líneas: N fila(s).",
+
+  "numero_factura": "número de factura exacto tal cual aparece (NO nº pedido ni nº albarán)",
+  "numero_factura_rectificada": "",
+  "serie": "",
   "tipo_factura": "factura | factura_simplificada | factura_rectificativa | ticket",
 
   "fecha_emision": "YYYY-MM-DD",
-  "hora_emision": "HH:MM o vacío",
-  "fecha_vencimiento": "YYYY-MM-DD o vacío",
-  "fecha_operacion": "YYYY-MM-DD o vacío",
+  "hora_emision": "",
+  "fecha_vencimiento": "",
+  "fecha_operacion": "",
 
-  "emisor_nombre": "nombre o razón social del emisor",
-  "emisor_nif": "NIF/CIF/NIE del emisor",
+  "emisor_nombre": "nombre o razón social completa del emisor",
+  "emisor_nif": "NIF/CIF/NIE del emisor exacto",
   "emisor_direccion": "dirección completa del emisor",
   "emisor_cp": "código postal del emisor",
   "emisor_ciudad": "ciudad del emisor",
-  "emisor_pais": "ES u otro código ISO",
+  "emisor_pais": "ES",
 
-  "receptor_nombre": "nombre o razón social del receptor",
-  "receptor_nif": "NIF/CIF/NIE del receptor",
+  "receptor_nombre": "nombre o razón social completa del receptor",
+  "receptor_nif": "NIF/CIF/NIE del receptor exacto",
   "receptor_direccion": "dirección completa del receptor",
   "receptor_cp": "código postal del receptor",
   "receptor_ciudad": "ciudad del receptor",
-  "receptor_pais": "ES u otro código ISO",
+  "receptor_pais": "ES",
 
-  "moneda": "EUR | USD | GBP | ...",
-  "condiciones_pago": "contado / 30 días / etc.",
-  "forma_pago": "transferencia / tarjeta / efectivo / domiciliación / etc.",
-  "cuenta_bancaria": "IBAN si aparece",
+  "moneda": "EUR",
+  "condiciones_pago": "",
+  "forma_pago": "transferencia | tarjeta | efectivo | domiciliación | etc.",
+  "cuenta_bancaria": "IBAN completo si aparece",
 
   "base_imponible": 0.00,
   "descuento_global": null,
-  "regimen_fiscal": "IVA | IGIC | AIEM | exento",
+  "regimen_fiscal": "IVA | IGIC | exento",
   "iva_porcentaje": null,
   "iva_cuota": 0.00,
   "desglose_impuestos": [
@@ -138,8 +148,8 @@ Para campos desconocidos usa null (números) o "" (cadenas). No inventes datos.
   "lineas": [
     {
       "numero": "1",
-      "referencia": "ref/código artículo",
-      "descripcion": "descripción del artículo o servicio",
+      "referencia": "",
+      "descripcion": "descripción completa del artículo o servicio",
       "unidad_medida": "ud / h / kg / etc.",
       "cantidad": 1.0,
       "precio_unitario": 0.00,
@@ -149,6 +159,22 @@ Para campos desconocidos usa null (números) o "" (cadenas). No inventes datos.
     }
   ],
 
-  "observaciones": "cualquier nota relevante no encuadrada arriba"
+  "observaciones": ""
 }
+
+NOTAS SOBRE LÍNEAS:
+- Extrae CADA fila de la tabla de artículos/servicios como una entrada en "lineas".
+- Lee cada columna por su posición bajo la cabecera, NO mezcles valores de columnas adyacentes.
+- "referencia" = código/referencia del artículo si existe (columna "Ref.", "Código", "Referencia").
+- "importe_total" = última columna numérica de la fila ("Importe", "Total", "Subtotal"). \
+  NUNCA lo dejes en null si hay un valor visible en esa columna. Es OBLIGATORIO extraerlo.
+- Verifica: importe_total ≈ cantidad × precio_unitario (± descuento). Si no cuadra, relee la fila.
+- En facturas rectificativas los importes pueden ser negativos → extráelos con signo.
+- No incluyas filas de subtotales, descuentos globales ni de impuestos en "lineas".
+
+NOTAS SOBRE DESGLOSE:
+- UNA entrada por cada tipo impositivo distinto. Si hay IGIC 3% y IGIC 7% → DOS objetos.
+- "base_imponible" (raíz) = suma exacta de TODAS las bases del desglose.
+- "iva_cuota" (raíz) = suma exacta de TODAS las cuotas del desglose.
+- "iva_porcentaje" = tipo único si solo hay uno; null si hay varios tipos distintos.
 """

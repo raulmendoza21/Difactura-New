@@ -1,78 +1,74 @@
 import { formatCurrency, formatDate } from '../../utils/formatters';
-import { INVOICE_STATE_COLORS, INVOICE_STATE_LABELS, INVOICE_TYPE_LABELS } from '../../utils/constants';
-import { getTaxIdLabel, getTaxLabel } from '../../utils/invoicePresentation';
+import { INVOICE_STATE_COLORS, INVOICE_STATE_LABELS } from '../../utils/constants';
 import ConfidenceBadge from '../common/ConfidenceBadge';
-import FieldConfidenceHint from './FieldConfidenceHint';
+
+const OPERATION_SIDE_LABELS = {
+  compra: 'Compra',
+  venta: 'Venta',
+  unknown: 'Desconocido',
+};
 
 export default function InvoiceDetailCard({ invoice }) {
   if (!invoice) return null;
 
-  const invoiceType = invoice.tipo?.toUpperCase?.() || invoice.tipo;
-  const extractionConf = invoice.extraction?.confianza ?? invoice.extraction?.normalized_document?.document_meta?.extraction_confidence;
-  const rawConfidence = Number(invoice.confianza_ia ?? extractionConf);
+  const json = invoice.documento_json || {};
+  const nd = json.normalized_document || {};
+
+  const rawConfidence = Number(invoice.confianza_ia ?? json.confianza);
   const confidenceValue = Number.isFinite(rawConfidence) && rawConfidence > 0 ? rawConfidence * 100 : null;
-  const taxLabel = getTaxLabel(invoice);
-  const taxIdLabel = getTaxIdLabel();
-  const fieldConfidence = invoice.extraction?.field_confidence || {};
-  const withholding = invoice.extraction?.normalized_document?.withholdings?.[0] || null;
-  const associatedCompany = invoice.empresa_asociada || null;
-  const taxBreakdown = invoice.extraction?.normalized_document?.tax_breakdown || [];
-  const detectedIssuer = invoice.extraction?.normalized_document?.issuer || null;
-  const detectedRecipient = invoice.extraction?.normalized_document?.recipient || null;
-  const paymentInfo = invoice.extraction?.normalized_document?.payment_info || null;
-  const observaciones = invoice.extraction?.normalized_document?.observaciones || invoice.notas || null;
-  const counterpartyConfidence =
-    invoice.tipo === 'venta' ? fieldConfidence.cliente : fieldConfidence.proveedor;
-  const counterpartyTaxConfidence =
-    invoice.tipo === 'venta' ? fieldConfidence.cif_cliente : fieldConfidence.cif_proveedor;
+
+  const operationSide = json.operation_side || 'unknown';
+  const taxLabel = (json.tax_regime || nd.classification?.tax_regime || 'IVA').toUpperCase();
+  const taxBreakdown = nd.tax_breakdown || [];
+  const withholding = nd.withholdings?.[0] || null;
+  const paymentInfo = nd.payment_info || {};
+  const observaciones = json.observaciones || nd.observaciones || null;
 
   const fields = [
-    { label: 'Numero', value: invoice.numero_factura || '-', confidence: fieldConfidence.numero_factura },
-    { label: 'Tipo', value: INVOICE_TYPE_LABELS[invoiceType] || invoice.tipo || '-' },
-    { label: 'Fecha factura', value: formatDate(invoice.fecha), confidence: fieldConfidence.fecha },
+    { label: 'Numero', value: json.numero_factura || '-' },
+    { label: 'Tipo operacion', value: OPERATION_SIDE_LABELS[operationSide] || operationSide },
+    { label: 'Tipo documento', value: json.tipo_factura || json.document_type || '-' },
+    { label: 'Fecha factura', value: formatDate(json.fecha) },
     { label: 'Fecha procesado', value: formatDate(invoice.fecha_procesado) },
-    { label: 'Contraparte', value: invoice.proveedor_nombre || '-', confidence: counterpartyConfidence },
-    { label: `${taxIdLabel} contraparte`, value: invoice.proveedor_cif || '-', confidence: counterpartyTaxConfidence },
-    { label: 'Empresa asociada', value: associatedCompany?.nombre || invoice.cliente_nombre || '-' },
-    { label: `${taxIdLabel} empresa`, value: associatedCompany?.cif || invoice.cliente_cif || '-' },
+    { label: 'Emisor', value: json.proveedor || nd.issuer?.name || '-' },
+    { label: 'NIF emisor', value: json.cif_proveedor || nd.issuer?.tax_id || '-' },
+    { label: 'Receptor', value: json.cliente || nd.recipient?.name || '-' },
+    { label: 'NIF receptor', value: json.cif_cliente || nd.recipient?.tax_id || '-' },
+    { label: 'Empresa asociada', value: invoice.empresa_asociada?.nombre || '-' },
   ];
 
-  // Build amounts: if there is a multi-rate breakdown use it, otherwise single line
+  // Importes
   const hasBreakdown = taxBreakdown.length > 1;
   const amountsBase = [
-    { label: 'Base imponible', value: formatCurrency(invoice.base_imponible), confidence: fieldConfidence.base_imponible },
+    { label: 'Base imponible', value: formatCurrency(json.base_imponible) },
   ];
   if (hasBreakdown) {
     taxBreakdown.forEach((tb) => {
-      const regime = (tb.tax_regime || taxLabel || 'Impuesto').toUpperCase();
+      const regime = (tb.tax_regime || taxLabel).toUpperCase();
       amountsBase.push({
         label: `${regime} ${tb.rate != null ? tb.rate + '%' : ''}`.trim(),
         value: `Base ${formatCurrency(tb.taxable_base)} · Cuota ${formatCurrency(tb.tax_amount)}`,
-        confidence: null,
         isTax: true,
       });
     });
   } else {
-    const taxPercent = invoice.iva_porcentaje != null ? `${invoice.iva_porcentaje}%` : '-';
-    amountsBase.push({ label: taxLabel, value: `${taxPercent} · ${formatCurrency(invoice.iva_importe)}`, confidence: fieldConfidence.iva });
+    const taxPercent = json.iva_porcentaje != null ? `${json.iva_porcentaje}%` : '-';
+    amountsBase.push({ label: taxLabel, value: `${taxPercent} · ${formatCurrency(json.iva)}` });
   }
-  amountsBase.push({ label: 'Total', value: formatCurrency(invoice.total), bold: true, confidence: fieldConfidence.total });
-  const amounts = amountsBase;
-
   if (withholding) {
-    amounts.splice(2, 0, {
+    amountsBase.push({
       label: `Retención ${withholding.withholding_type || ''}`.trim(),
       value: `${Number(withholding.rate || 0).toFixed(2)}% · -${formatCurrency(withholding.amount || 0)}`,
-      confidence: null,
     });
   }
+  amountsBase.push({ label: 'Total', value: formatCurrency(json.total), bold: true });
 
   return (
     <div className="card divide-y divide-slate-100">
       <div className="p-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-bold text-slate-800">
-            {invoice.numero_factura || `Factura #${invoice.id}`}
+            {json.numero_factura || `Factura #${invoice.id}`}
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">ID: {invoice.id}</p>
         </div>
@@ -89,60 +85,20 @@ export default function InvoiceDetailCard({ invoice }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
           {fields.map((field) => (
             <div key={field.label}>
-              <dt className="flex items-center gap-2 text-xs text-slate-400">
-                <span>{field.label}</span>
-                <FieldConfidenceHint value={field.confidence} label={field.label} compact />
-              </dt>
+              <dt className="text-xs text-slate-400">{field.label}</dt>
               <dd className="text-sm font-medium text-slate-700 mt-0.5">{field.value}</dd>
             </div>
           ))}
         </div>
       </div>
 
-      {(detectedIssuer?.name || detectedRecipient?.name) && (
-        <div className="p-5 bg-slate-50/30">
-          <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Partes detectadas en el documento</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
-            <div>
-              <dt className="flex items-center gap-2 text-xs text-slate-400">
-                <span>Emisor detectado</span>
-                <FieldConfidenceHint value={fieldConfidence.proveedor} label="Emisor detectado" compact />
-              </dt>
-              <dd className="text-sm font-medium text-slate-700 mt-0.5">{detectedIssuer?.name || '-'}</dd>
-            </div>
-            <div>
-              <dt className="flex items-center gap-2 text-xs text-slate-400">
-                <span>{taxIdLabel} emisor</span>
-                <FieldConfidenceHint value={fieldConfidence.cif_proveedor} label={`${taxIdLabel} emisor`} compact />
-              </dt>
-              <dd className="text-sm font-medium text-slate-700 mt-0.5">{detectedIssuer?.tax_id || '-'}</dd>
-            </div>
-            <div>
-              <dt className="flex items-center gap-2 text-xs text-slate-400">
-                <span>Receptor detectado</span>
-                <FieldConfidenceHint value={fieldConfidence.cliente} label="Receptor detectado" compact />
-              </dt>
-              <dd className="text-sm font-medium text-slate-700 mt-0.5">{detectedRecipient?.name || '-'}</dd>
-            </div>
-            <div>
-              <dt className="flex items-center gap-2 text-xs text-slate-400">
-                <span>{taxIdLabel} receptor</span>
-                <FieldConfidenceHint value={fieldConfidence.cif_cliente} label={`${taxIdLabel} receptor`} compact />
-              </dt>
-              <dd className="text-sm font-medium text-slate-700 mt-0.5">{detectedRecipient?.tax_id || '-'}</dd>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="p-5 bg-slate-50/50">
         <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Importes</h4>
         <div className="space-y-2">
-          {amounts.map((amount) => (
+          {amountsBase.map((amount) => (
             <div key={amount.label} className="flex justify-between items-center gap-4">
-              <span className={`flex items-center gap-2 text-sm ${amount.bold ? 'font-bold text-slate-800' : 'text-slate-500'}`}>
-                <span>{amount.label}</span>
-                <FieldConfidenceHint value={amount.confidence} label={amount.label} compact />
+              <span className={`text-sm ${amount.bold ? 'font-bold text-slate-800' : 'text-slate-500'}`}>
+                {amount.label}
               </span>
               <span className={`text-sm ${amount.bold ? 'font-bold text-slate-800 text-lg' : 'font-medium text-slate-700'}`}>
                 {amount.value}
@@ -151,13 +107,6 @@ export default function InvoiceDetailCard({ invoice }) {
           ))}
         </div>
       </div>
-
-      {invoice.notas && !observaciones && (
-        <div className="p-5">
-          <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Notas</h4>
-          <p className="text-sm text-slate-600">{invoice.notas}</p>
-        </div>
-      )}
 
       {(paymentInfo?.forma_pago || paymentInfo?.cuenta_bancaria || paymentInfo?.fecha_vencimiento || paymentInfo?.condiciones_pago) && (
         <div className="p-5">

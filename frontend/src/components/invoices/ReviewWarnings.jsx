@@ -1,5 +1,4 @@
 import StatusPanel from '../common/StatusPanel';
-import { getTaxIdLabel, getTaxLabel } from '../../utils/invoicePresentation';
 import { getNormalizedWarningGroups, hasWarningGroup } from '../../utils/extractionWarnings';
 
 function isValidTaxId(value) {
@@ -16,26 +15,27 @@ function toNumber(value) {
 function buildWarnings(invoice) {
   if (!invoice) return [];
 
+  const json = invoice.documento_json || {};
+  const nd = json.normalized_document || {};
   const warnings = [];
-  const taxLabel = getTaxLabel(invoice);
-  const taxIdLabel = getTaxIdLabel();
-  const extractionWarnings = invoice.extraction?.warnings || [];
-  const decisionFlags = invoice.extraction?.decision_flags || [];
+  const taxLabel = (json.tax_regime || 'IVA').toUpperCase();
+  const extractionWarnings = json.warnings || [];
+  const decisionFlags = nd.decision_flags || [];
   const warningGroups = getNormalizedWarningGroups(extractionWarnings);
-  const base = toNumber(invoice.base_imponible);
-  const tax = toNumber(invoice.iva_importe);
-  const total = toNumber(invoice.total);
+  const base = toNumber(json.base_imponible);
+  const tax = toNumber(json.iva);
+  const total = toNumber(json.total);
   const jobError = invoice.job?.error_message;
-  const providerTaxId = String(invoice.proveedor_cif || '').trim();
-  const companyTaxId = String(invoice.cliente_cif || '').trim();
-  const lineSum = Array.isArray(invoice.lineas)
-    ? invoice.lineas.reduce((sum, line) => sum + (toNumber(line.subtotal) || 0), 0)
+  const providerTaxId = String(json.cif_proveedor || '').trim();
+  const lineas = json.lineas || nd.line_items || [];
+  const lineSum = Array.isArray(lineas)
+    ? lineas.reduce((sum, line) => sum + (toNumber(line.importe ?? line.subtotal) || 0), 0)
     : 0;
   const totalsAreCoherent =
     base != null && tax != null && total != null && Math.abs(base + tax - total) <= 0.02;
   const linesMatchBase =
-    Array.isArray(invoice.lineas) && invoice.lineas.length > 0 && base != null && Math.abs(lineSum - base) <= 0.02;
-  const documentType = invoice.extraction?.normalized_document?.classification?.document_type || '';
+    Array.isArray(lineas) && lineas.length > 0 && base != null && Math.abs(lineSum - base) <= 0.02;
+  const documentType = nd.classification?.document_type || json.tipo_factura || '';
   const isTicketLike = documentType === 'ticket' || documentType === 'factura_simplificada';
   const hasAutomaticCorrections =
     warningGroups.includes('amount_adjustment')
@@ -73,21 +73,21 @@ function buildWarnings(invoice) {
     });
   }
 
-  if (!invoice.numero_factura) {
+  if (!json.numero_factura) {
     warnings.push({
       tone: 'warning',
       text: 'Falta el numero de factura.',
     });
   }
 
-  if (!invoice.fecha) {
+  if (!json.fecha) {
     warnings.push({
       tone: 'warning',
       text: 'Falta la fecha de la factura.',
     });
   }
 
-  if (!invoice.proveedor_nombre) {
+  if (!json.proveedor && !nd.issuer?.name) {
     warnings.push({
       tone: 'warning',
       text: 'Falta identificar la contraparte principal del documento.',
@@ -97,19 +97,12 @@ function buildWarnings(invoice) {
   if (!providerTaxId) {
     warnings.push({
       tone: 'info',
-      text: `No se ha podido confirmar el ${taxIdLabel} de la contraparte.`,
+      text: 'No se ha podido confirmar el NIF/CIF de la contraparte.',
     });
   } else if (!isValidTaxId(providerTaxId)) {
     warnings.push({
       tone: 'warning',
-      text: `El ${taxIdLabel} de la contraparte no se ha podido validar con suficiente fiabilidad: ${invoice.proveedor_cif}.`,
-    });
-  }
-
-  if (companyTaxId && !isValidTaxId(companyTaxId)) {
-    warnings.push({
-      tone: 'info',
-      text: `El ${taxIdLabel} de la empresa asociada parece incompleto o poco fiable: ${invoice.cliente_cif}.`,
+      text: `El NIF/CIF de la contraparte no se ha podido validar con suficiente fiabilidad: ${json.cif_proveedor}.`,
     });
   }
 
@@ -123,7 +116,7 @@ function buildWarnings(invoice) {
     }
   }
 
-  if (!isTicketLike && Array.isArray(invoice.lineas) && invoice.lineas.length > 0 && base != null) {
+  if (!isTicketLike && Array.isArray(lineas) && lineas.length > 0 && base != null) {
     if (Math.abs(lineSum - base) > 0.02) {
       warnings.push({
         tone: 'warning',
@@ -132,7 +125,7 @@ function buildWarnings(invoice) {
     }
   }
 
-  if (!invoice.lineas || invoice.lineas.length === 0) {
+  if (!lineas || lineas.length === 0) {
     warnings.push({
       tone: 'info',
       text: 'No se han detectado lineas de detalle. Puedes completarlas manualmente si te hacen falta.',

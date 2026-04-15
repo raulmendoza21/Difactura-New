@@ -14,9 +14,11 @@ const FILTERS = [
   { key: 'all', label: 'Todo', estado: undefined, accent: 'blue' },
   { key: INVOICE_STATES.SUBIDA, label: 'Subidas', estado: INVOICE_STATES.SUBIDA, accent: 'slate' },
   { key: INVOICE_STATES.EN_PROCESO, label: 'En proceso', estado: INVOICE_STATES.EN_PROCESO, accent: 'blue' },
+  { key: INVOICE_STATES.PROCESADA_IA, label: 'Procesadas IA', estado: INVOICE_STATES.PROCESADA_IA, accent: 'indigo' },
   { key: INVOICE_STATES.PENDIENTE_REVISION, label: 'Pendientes', estado: INVOICE_STATES.PENDIENTE_REVISION, accent: 'amber' },
   { key: INVOICE_STATES.ERROR_PROCESAMIENTO, label: 'Con error', estado: INVOICE_STATES.ERROR_PROCESAMIENTO, accent: 'red' },
   { key: INVOICE_STATES.VALIDADA, label: 'Validadas', estado: INVOICE_STATES.VALIDADA, accent: 'emerald' },
+  { key: INVOICE_STATES.RECHAZADA, label: 'Rechazadas', estado: INVOICE_STATES.RECHAZADA, accent: 'red' },
 ];
 
 const CHANNEL_OPTIONS = [
@@ -53,6 +55,10 @@ const STATE_FILTER_STYLES = {
   slate: {
     active: 'border-slate-700 bg-slate-700 text-white shadow-slate-200',
     idle: 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-slate-100',
+  },
+  indigo: {
+    active: 'border-indigo-600 bg-indigo-600 text-white shadow-indigo-200',
+    idle: 'border-indigo-100 bg-indigo-50/70 text-indigo-700 hover:border-indigo-200 hover:bg-indigo-50',
   },
   amber: {
     active: 'border-amber-500 bg-amber-500 text-white shadow-amber-200',
@@ -300,7 +306,7 @@ export default function InvoiceHistory() {
 
     try {
       await reprocessInvoice(invoice.id);
-      setFeedback(`La factura ${invoice.numero_factura || `#${invoice.id}`} ha vuelto a la cola de procesamiento.`);
+      setFeedback(`La factura ${invoice.documento_json?.numero_factura || `#${invoice.id}`} ha vuelto a la cola de procesamiento.`);
       await handleRefresh();
     } catch (err) {
       setStatsError(err.response?.data?.message || 'No se pudo relanzar el procesamiento');
@@ -406,7 +412,7 @@ export default function InvoiceHistory() {
             </div>
           </div>
 
-          <div className="relative z-0 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="relative z-0 grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-8">
             {FILTERS.map((filter) => {
               const isActive = selectedFilter === filter.key;
               const count =

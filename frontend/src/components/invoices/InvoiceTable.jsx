@@ -3,7 +3,6 @@ import { formatDate, formatDateTime, formatCurrency } from '../../utils/formatte
 import {
   INVOICE_STATE_LABELS,
   INVOICE_STATE_COLORS,
-  INVOICE_TYPE_LABELS,
   JOB_STATE_LABELS,
   JOB_STATE_COLORS,
   INVOICE_STATES,
@@ -11,17 +10,18 @@ import {
 } from '../../utils/constants';
 import ConfidenceBadge from '../common/ConfidenceBadge';
 
-function getInvoiceTypeLabel(tipo) {
-  if (!tipo) return '-';
-  return INVOICE_TYPE_LABELS[tipo] || INVOICE_TYPE_LABELS[String(tipo).toUpperCase()] || tipo;
-}
+const OPERATION_SIDE_LABELS = {
+  compra: 'Compra',
+  venta: 'Venta',
+  unknown: 'Desconocido',
+};
 
 function getInvoiceDate(invoice) {
-  return invoice.fecha || invoice.fecha_factura || invoice.created_at;
+  return invoice.documento_json?.fecha || invoice.created_at;
 }
 
 function getInvoiceConfidence(invoice) {
-  return invoice.confianza_ia ?? invoice.confianza_extraccion;
+  return invoice.confianza_ia ?? invoice.documento_json?.confianza;
 }
 
 function canReprocess(invoice) {
@@ -34,17 +34,16 @@ function getChannelLabel(channel) {
 }
 
 function getCounterpartyName(invoice) {
+  const json = invoice.documento_json || {};
   return (
-    invoice.proveedor_nombre ||
-    (invoice.tipo === 'venta'
-      ? invoice.extraction?.normalized_document?.recipient?.name
-      : invoice.extraction?.normalized_document?.issuer?.name) ||
+    json.proveedor ||
+    json.normalized_document?.issuer?.name ||
     '-'
   );
 }
 
 function getAssociatedCompanyName(invoice) {
-  return invoice.cliente_nombre || invoice.empresa_asociada?.nombre || '-';
+  return invoice.empresa_asociada?.nombre || '-';
 }
 
 export default function InvoiceTable({
@@ -88,7 +87,7 @@ export default function InvoiceTable({
                 <td className="px-5 py-3.5">
                   <div className="space-y-1">
                     <Link to={`/invoices/review/${invoice.id}`} className="font-semibold text-blue-600 hover:text-blue-800">
-                      {invoice.numero_factura || `#${invoice.id}`}
+                      {invoice.documento_json?.numero_factura || `#${invoice.id}`}
                     </Link>
                     <p className="text-xs text-slate-400">
                       {invoice.documento?.nombre_archivo || `Documento #${invoice.id}`}
@@ -133,11 +132,11 @@ export default function InvoiceTable({
                 </td>
                 <td className="px-5 py-3.5">
                   <span className="badge bg-slate-100 text-slate-600">
-                    {getInvoiceTypeLabel(invoice.tipo)}
+                    {OPERATION_SIDE_LABELS[invoice.documento_json?.operation_side] || '-'}
                   </span>
                 </td>
                 <td className="px-5 py-3.5 text-right font-semibold text-slate-800">
-                  {formatCurrency(invoice.total)}
+                  {formatCurrency(invoice.documento_json?.total)}
                 </td>
                 <td className="px-5 py-3.5 text-center">
                   <ConfidenceBadge value={getInvoiceConfidence(invoice)} />
@@ -178,7 +177,7 @@ export default function InvoiceTable({
           <div key={invoice.id} className="p-4 hover:bg-slate-50 transition-colors space-y-3">
             <Link to={`/invoices/review/${invoice.id}`} className="block">
               <div className="flex items-center justify-between mb-2 gap-3">
-                <span className="font-semibold text-blue-600">{invoice.numero_factura || `#${invoice.id}`}</span>
+                <span className="font-semibold text-blue-600">{invoice.documento_json?.numero_factura || `#${invoice.id}`}</span>
                 <span className={`badge ${INVOICE_STATE_COLORS[invoice.estado] || 'bg-slate-100 text-slate-600'}`}>
                   {INVOICE_STATE_LABELS[invoice.estado] || invoice.estado}
                 </span>
@@ -195,7 +194,7 @@ export default function InvoiceTable({
                 </p>
               )}
               <div className="flex items-center justify-between mt-2">
-                <span className="text-sm font-semibold text-slate-800">{formatCurrency(invoice.total)}</span>
+                <span className="text-sm font-semibold text-slate-800">{formatCurrency(invoice.documento_json?.total)}</span>
                 <span className="text-xs text-slate-400">{formatDate(getInvoiceDate(invoice))}</span>
               </div>
               {invoice.job && (

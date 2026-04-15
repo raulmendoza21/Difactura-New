@@ -36,7 +36,8 @@ async function findLatestByFacturaAndAction(facturaId, action) {
 
 async function findRecent(limit = 20) {
   const result = await db.query(
-    `SELECT a.*, u.nombre AS usuario_nombre, f.numero_factura
+    `SELECT a.*, u.nombre AS usuario_nombre,
+            f.documento_json->>'numero_factura' AS numero_factura
      FROM auditoria_procesos a
      LEFT JOIN usuarios u ON a.usuario_id = u.id
      LEFT JOIN facturas f ON a.factura_id = f.id

@@ -31,7 +31,7 @@ async function upload(req, res, next) {
 
 async function getAll(req, res, next) {
   try {
-    const { estado, tipo, page, limit, company_id, channel, batch_id, search, sort_by, sort_dir } = req.query;
+    const { estado, page, limit, company_id, channel, batch_id, search, sort_by, sort_dir } = req.query;
     const companyHeaderId = parseInt(req.headers['x-company-id'], 10);
     const parsedCompanyId = company_id
       ? parseInt(company_id, 10)
@@ -39,7 +39,6 @@ async function getAll(req, res, next) {
     const result = await invoiceService.getAll({
       asesoriaId: req.user.asesoria_id,
       estado,
-      tipo,
       companyId: parsedCompanyId,
       channel,
       batchId: batch_id,
@@ -99,7 +98,6 @@ async function update(req, res, next) {
       parseInt(req.params.id, 10),
       req.body,
       req.user.id,
-      req.user.asesoria_id,
       req.ip
     );
     res.json(factura);

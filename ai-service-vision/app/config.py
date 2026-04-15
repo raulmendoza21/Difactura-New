@@ -20,4 +20,4 @@ class Settings(BaseSettings):
     timeout_seconds: int = Field(default=120, alias="OPENAI_TIMEOUT_SECONDS")
     max_file_size_mb: int = Field(default=50, alias="MAX_FILE_SIZE_MB")
     max_pages: int = Field(default=8, alias="MAX_PAGES")
-    image_dpi: int = Field(default=150, alias="IMAGE_DPI")
+    image_dpi: int = Field(default=300, alias="IMAGE_DPI")

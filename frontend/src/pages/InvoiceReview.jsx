@@ -10,7 +10,6 @@ import InvoicePreview from '../components/invoices/InvoicePreview';
 import ReviewWarnings from '../components/invoices/ReviewWarnings';
 import { getInvoiceById, rejectInvoice, reprocessInvoice, updateInvoice, validateInvoice } from '../services/invoiceService';
 import { formatCurrency } from '../utils/formatters';
-import { getTaxIdLabel, getTaxLabel, getTaxRegime } from '../utils/invoicePresentation';
 import { INVOICE_STATES } from '../utils/constants';
 
 const ACTIVE_PROCESSING_STATES = new Set([INVOICE_STATES.SUBIDA, INVOICE_STATES.EN_PROCESO]);
@@ -31,25 +30,26 @@ function toInputValue(value) {
 }
 
 function createDraftFromInvoice(invoice) {
+  const json = invoice?.documento_json || {};
+  const nd = json.normalized_document || {};
+  const rawLines = json.lineas || nd.line_items || [];
   return {
-    numero_factura: invoice?.numero_factura || '',
-    tipo: invoice?.tipo || 'compra',
-    fecha: invoice?.fecha ? invoice.fecha.slice(0, 10) : '',
-    proveedor_nombre: invoice?.proveedor_nombre || '',
-    proveedor_cif: invoice?.proveedor_cif || '',
-    cliente_nombre: invoice?.cliente_nombre || '',
-    cliente_cif: invoice?.cliente_cif || '',
-    base_imponible: toInputValue(invoice?.base_imponible),
-    iva_porcentaje: toInputValue(invoice?.iva_porcentaje),
-    iva_importe: toInputValue(invoice?.iva_importe),
-    total: toInputValue(invoice?.total),
-    notas: invoice?.notas || '',
-    lineas: (invoice?.lineas || []).map((line) => ({
-      id: line.id || `${line.descripcion}-${line.orden || Math.random()}`,
+    numero_factura: json.numero_factura || '',
+    tipo: json.operation_side || 'compra',
+    fecha: json.fecha ? String(json.fecha).slice(0, 10) : '',
+    proveedor_nombre: json.proveedor || nd.issuer?.name || '',
+    proveedor_cif: json.cif_proveedor || nd.issuer?.tax_id || '',
+    base_imponible: toInputValue(json.base_imponible),
+    iva_porcentaje: toInputValue(json.iva_porcentaje),
+    iva_importe: toInputValue(json.iva),
+    total: toInputValue(json.total),
+    notas: nd.observaciones || json.observaciones || '',
+    lineas: rawLines.map((line, i) => ({
+      id: `line-${i}-${Math.random().toString(16).slice(2)}`,
       descripcion: line.descripcion || '',
       cantidad: toInputValue(line.cantidad),
       precio_unitario: toInputValue(line.precio_unitario),
-      subtotal: toInputValue(line.subtotal ?? line.importe),
+      subtotal: toInputValue(line.subtotal ?? line.importe_total ?? line.importe),
     })),
   };
 }
@@ -60,28 +60,35 @@ function parseNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function buildUpdatePayload(draft) {
+function buildUpdatePayload(draft, originalJson) {
+  const lines = draft.lineas
+    .map((line) => ({
+      descripcion: line.descripcion.trim(),
+      cantidad: parseNumber(line.cantidad),
+      precio_unitario: parseNumber(line.precio_unitario),
+      importe: parseNumber(line.subtotal),
+    }))
+    .filter((line) => line.descripcion || line.cantidad != null || line.precio_unitario != null || line.importe != null);
+
   return {
-    numero_factura: draft.numero_factura.trim() || null,
-    tipo: draft.tipo || 'compra',
-    fecha: draft.fecha || null,
-    proveedor_nombre: draft.proveedor_nombre.trim(),
-    proveedor_cif: draft.proveedor_cif.trim(),
-    cliente_nombre: draft.cliente_nombre.trim(),
-    cliente_cif: draft.cliente_cif.trim(),
-    base_imponible: parseNumber(draft.base_imponible),
-    iva_porcentaje: parseNumber(draft.iva_porcentaje),
-    iva_importe: parseNumber(draft.iva_importe),
-    total: parseNumber(draft.total),
-    notas: draft.notas.trim() || null,
-    lineas: draft.lineas
-      .map((line) => ({
-        descripcion: line.descripcion.trim(),
-        cantidad: parseNumber(line.cantidad),
-        precio_unitario: parseNumber(line.precio_unitario),
-        importe: parseNumber(line.subtotal),
-      }))
-      .filter((line) => line.descripcion || line.cantidad != null || line.precio_unitario != null || line.importe != null),
+    documento_json: {
+      ...originalJson,
+      numero_factura: draft.numero_factura.trim() || null,
+      operation_side: draft.tipo || 'compra',
+      fecha: draft.fecha || null,
+      proveedor: draft.proveedor_nombre.trim(),
+      cif_proveedor: draft.proveedor_cif.trim(),
+      base_imponible: parseNumber(draft.base_imponible),
+      iva_porcentaje: parseNumber(draft.iva_porcentaje),
+      iva: parseNumber(draft.iva_importe),
+      total: parseNumber(draft.total),
+      lineas: lines,
+      normalized_document: {
+        ...(originalJson?.normalized_document || {}),
+        observaciones: draft.notas.trim() || null,
+        line_items: lines,
+      },
+    },
   };
 }
 
@@ -124,7 +131,7 @@ function formatRefreshTime(value) {
 }
 
 function getExtractionFieldConfidence(invoice, key) {
-  const value = invoice?.extraction?.field_confidence?.[key];
+  const value = invoice?.documento_json?.field_confidence?.[key];
   return typeof value === 'number' ? value : null;
 }
 
@@ -224,14 +231,15 @@ export default function InvoiceReview() {
   const canReprocess = REPROCESSABLE_STATES.has(invoice?.estado);
   const isProcessing = ACTIVE_PROCESSING_STATES.has(invoice?.estado);
   const refreshLabel = formatRefreshTime(lastRefreshAt);
-  const fieldConfidence = invoice?.extraction?.field_confidence || {};
+  const json = invoice?.documento_json || {};
+  const fieldConfidence = json.field_confidence || {};
+  const operationSide = json.operation_side || 'compra';
   const counterpartyConfidence =
-    invoice?.tipo === 'venta' ? fieldConfidence.cliente : fieldConfidence.proveedor;
+    operationSide === 'venta' ? fieldConfidence.cliente : fieldConfidence.proveedor;
   const counterpartyTaxConfidence =
-    invoice?.tipo === 'venta' ? fieldConfidence.cif_cliente : fieldConfidence.cif_proveedor;
-  const taxLabel = getTaxLabel(invoice);
-  const taxIdLabel = getTaxIdLabel();
-  const withholding = invoice?.extraction?.normalized_document?.withholdings?.[0] || null;
+    operationSide === 'venta' ? fieldConfidence.cif_cliente : fieldConfidence.cif_proveedor;
+  const taxLabel = (json.tax_regime || 'IVA').toUpperCase();
+  const withholding = json.normalized_document?.withholdings?.[0] || null;
   const showTechnicalInsights =
     typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('debug') === '1';
@@ -313,7 +321,7 @@ export default function InvoiceReview() {
     setFeedback('');
 
     try {
-      const updated = await updateInvoice(id, buildUpdatePayload(draft));
+      const updated = await updateInvoice(id, buildUpdatePayload(draft, invoice?.documento_json));
       const nextInvoice = updated.factura || updated;
       setInvoice(nextInvoice);
       setDraft(createDraftFromInvoice(nextInvoice));
@@ -529,9 +537,9 @@ export default function InvoiceReview() {
             <>
               <InvoiceDetailCard invoice={invoice} />
               <InvoiceLineItems
-                lines={invoice?.lineas || []}
+                lines={invoice?.documento_json?.lineas || invoice?.documento_json?.normalized_document?.line_items || []}
                 confidence={getExtractionFieldConfidence(invoice, 'lineas')}
-                taxRegime={getTaxRegime(invoice)}
+                taxRegime={taxLabel}
               />
             </>
           ) : (
@@ -584,7 +592,7 @@ export default function InvoiceReview() {
                   </div>
 
                   <label className="space-y-1">
-                    <ReviewFieldLabel label="Contraparte" confidence={counterpartyConfidence} />
+                    <ReviewFieldLabel label="Emisor" confidence={counterpartyConfidence} />
                     <input
                       className={getFieldInputClass(counterpartyConfidence)}
                       value={draft.proveedor_nombre}
@@ -593,7 +601,7 @@ export default function InvoiceReview() {
                   </label>
 
                   <label className="space-y-1">
-                    <ReviewFieldLabel label={`${taxIdLabel} contraparte`} confidence={counterpartyTaxConfidence} />
+                    <ReviewFieldLabel label="NIF emisor" confidence={counterpartyTaxConfidence} />
                     <input
                       className={getFieldInputClass(counterpartyTaxConfidence)}
                       value={draft.proveedor_cif}
@@ -601,23 +609,12 @@ export default function InvoiceReview() {
                     />
                   </label>
 
-                  <label className="space-y-1">
+                  <div className="space-y-1">
                     <ReviewFieldLabel label="Empresa asociada" confidence={null} />
-                    <input
-                      className="input-field bg-slate-50 text-slate-500"
-                      value={draft.cliente_nombre}
-                      readOnly
-                    />
-                  </label>
-
-                  <label className="space-y-1">
-                    <ReviewFieldLabel label={`${taxIdLabel} empresa`} confidence={null} />
-                    <input
-                      className="input-field bg-slate-50 text-slate-500"
-                      value={draft.cliente_cif}
-                      readOnly
-                    />
-                  </label>
+                    <div className="input-field bg-slate-50 text-slate-500">
+                      {invoice?.empresa_asociada?.nombre || '-'}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="border-t border-slate-100 pt-5">
@@ -785,7 +782,7 @@ export default function InvoiceReview() {
       {!isProcessing && invoice?.estado !== INVOICE_STATES.ERROR_PROCESAMIENTO && (
         <div className="space-y-4">
           <ReviewWarnings invoice={invoice} />
-          {showTechnicalInsights && <ExtractionInsights extraction={invoice?.extraction} />}
+          {showTechnicalInsights && <ExtractionInsights extraction={invoice?.documento_json} />}
         </div>
       )}
     </div>

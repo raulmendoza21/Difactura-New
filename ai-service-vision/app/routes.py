@@ -316,7 +316,8 @@ async def process_invoice(
         return response
 
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        logger.error("Extraction failed for %s: %s", file.filename, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
     except Exception as exc:
         logger.exception("Unexpected error processing %s", file.filename)
         raise HTTPException(status_code=500, detail=f"Error interno: {exc}")

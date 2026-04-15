@@ -2,7 +2,15 @@ import { formatCurrency } from '../../utils/formatters';
 import FieldConfidenceHint from './FieldConfidenceHint';
 
 export default function InvoiceLineItems({ lines = [], confidence = null }) {
-  if (lines.length === 0) {
+  // Normalize field name: AI returns "importe"/"importe_total", UI uses "subtotal"
+  // Also filter out empty lines
+  const normalizedLines = lines
+    .filter((line) => line.descripcion || line.cantidad || line.precio_unitario)
+    .map((line) => ({
+      ...line,
+      subtotal: line.subtotal ?? line.importe_total ?? line.importe ?? null,
+    }));
+  if (normalizedLines.length === 0) {
     return (
       <div className="card p-6">
         <div className="flex items-center gap-2 mb-2">
@@ -31,7 +39,7 @@ export default function InvoiceLineItems({ lines = [], confidence = null }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {lines.map((line, i) => (
+            {normalizedLines.map((line, i) => (
               <tr key={line.id || i} className="hover:bg-slate-50/50">
                 <td className="px-5 py-3 text-slate-700">{line.descripcion || '-'}</td>
                 <td className="px-5 py-3 text-right text-slate-600">{line.cantidad ?? '-'}</td>
@@ -43,7 +51,7 @@ export default function InvoiceLineItems({ lines = [], confidence = null }) {
         </table>
       </div>
       <div className="sm:hidden divide-y divide-slate-100">
-        {lines.map((line, i) => (
+        {normalizedLines.map((line, i) => (
           <div key={line.id || i} className="p-4">
             <p className="text-sm text-slate-700 font-medium">{line.descripcion || '-'}</p>
             <div className="flex justify-between mt-1 text-xs text-slate-500">
