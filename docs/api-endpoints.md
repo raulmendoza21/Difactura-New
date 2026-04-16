@@ -15,7 +15,7 @@ Este documento no intenta definir toda la API futura del producto final.
 Solo fija la API que sigue teniendo sentido en la fase actual.
 
 Documento rector:
-
+    
 - ver `docs/motor-documental-desacoplado.md`
 
 ---

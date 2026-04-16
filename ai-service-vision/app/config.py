@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     openai_base_url: str = Field(default="https://api.openai.com/v1", alias="OPENAI_BASE_URL")
-    openai_model: str = Field(default="gpt-4.1-mini", alias="OPENAI_MODEL")
+    openai_model: str = Field(default="gpt-4.1", alias="OPENAI_MODEL")
     timeout_seconds: int = Field(default=120, alias="OPENAI_TIMEOUT_SECONDS")
     max_file_size_mb: int = Field(default=50, alias="MAX_FILE_SIZE_MB")
     max_pages: int = Field(default=8, alias="MAX_PAGES")
