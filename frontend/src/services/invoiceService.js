@@ -1,6 +1,6 @@
 import api from './api';
 
-export async function uploadInvoices(files, { companyId, channel = 'web' } = {}) {
+export async function uploadInvoices(files, { companyId, channel = 'web', onProgress } = {}) {
   const formData = new FormData();
   files.forEach((file) => formData.append('files', file));
   if (companyId) {
@@ -11,6 +11,9 @@ export async function uploadInvoices(files, { companyId, channel = 'web' } = {})
   const { data } = await api.post('/invoices/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120000,
+    onUploadProgress: onProgress
+      ? (e) => onProgress(e.total ? Math.round((e.loaded * 100) / e.total) : 0)
+      : undefined,
   });
   return data;
 }

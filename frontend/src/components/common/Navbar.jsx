@@ -1,36 +1,10 @@
-import { useEffect, useState } from 'react';
 import CompanySelector from '../companies/CompanySelector';
 import { useAuth } from '../../hooks/useAuth';
-import { getCompanies } from '../../services/companyService';
+import { useCompanies } from '../../hooks/useCompanies';
 
 export default function Navbar({ onToggleSidebar }) {
   const { user, advisory, selectedCompany, setSelectedCompany, clearSelectedCompany, logout } = useAuth();
-  const [companies, setCompanies] = useState([]);
-  const [companiesLoading, setCompaniesLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-
-    const loadCompanies = async () => {
-      try {
-        const items = await getCompanies();
-        if (!active) return;
-        setCompanies(items);
-      } catch {
-        if (!active) return;
-        setCompanies([]);
-      } finally {
-        if (!active) return;
-        setCompaniesLoading(false);
-      }
-    };
-
-    loadCompanies();
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { companies, loading: companiesLoading } = useCompanies();
 
   const handleCompanyChange = (event) => {
     const companyId = Number(event.target.value);

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { formatDateTime } from '../../utils/formatters';
 import InfoPopover from '../common/InfoPopover';
@@ -20,7 +21,7 @@ function getActionLabel(action) {
   return ACTION_LABELS[action] || action || 'Actividad';
 }
 
-export default function RecentActivity({ activities = [], loading = false }) {
+export default memo(function RecentActivity({ activities = [], loading = false }) {
   if (loading) {
     return (
       <div className="card p-6">
@@ -101,4 +102,4 @@ export default function RecentActivity({ activities = [], loading = false }) {
       </div>
     </div>
   );
-}
+})

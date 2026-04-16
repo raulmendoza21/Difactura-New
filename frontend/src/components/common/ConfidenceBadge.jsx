@@ -4,7 +4,8 @@ import { formatPercentage } from '../../utils/formatters';
 export default function ConfidenceBadge({ value, size = 'sm' }) {
   if (value == null) return <span className="badge bg-slate-100 text-slate-400">N/A</span>;
 
-  const normalized = Number(value) <= 1 ? Number(value) * 100 : Number(value);
+  const isRatio = Number(value) <= 1;
+  const normalized = isRatio ? Number(value) * 100 : Number(value);
 
   let colorClass, dotColor;
   if (normalized >= CONFIDENCE_THRESHOLDS.HIGH) {
@@ -21,7 +22,7 @@ export default function ConfidenceBadge({ value, size = 'sm' }) {
   return (
     <span className={`badge ${colorClass} ${size === 'lg' ? 'px-3 py-1.5 text-sm' : ''}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${dotColor} mr-1.5`} />
-      {formatPercentage(value)}
+      {formatPercentage(value, { isRatio })}
     </span>
   );
 }

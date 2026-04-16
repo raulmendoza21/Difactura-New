@@ -26,6 +26,7 @@ function formatSize(bytes) {
 export default function InvoiceUploader({ company, onUploaded }) {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(null);
   const [files, setFiles] = useState([]);
@@ -197,9 +198,14 @@ export default function InvoiceUploader({ company, onUploaded }) {
     setError('');
     setSuccess(null);
     setUploading(true);
+    setUploadProgress(0);
 
     try {
-      const result = await uploadInvoices(files, { companyId: company.id, channel });
+      const result = await uploadInvoices(files, {
+        companyId: company.id,
+        channel,
+        onProgress: setUploadProgress,
+      });
       setSuccess(result);
       setFiles([]);
       onUploaded?.(result);
@@ -207,6 +213,7 @@ export default function InvoiceUploader({ company, onUploaded }) {
       setError(err.response?.data?.message || 'Error al subir los documentos');
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -388,15 +395,31 @@ export default function InvoiceUploader({ company, onUploaded }) {
             </div>
           )}
 
-          <div className="mt-5 flex justify-stretch sm:justify-end">
-            <button
-              type="button"
-              onClick={handleUpload}
-              className="btn-primary w-full justify-center sm:w-auto"
-              disabled={uploading || files.length === 0 || !company?.id}
-            >
-              Procesar
-            </button>
+          <div className="mt-5 flex flex-col gap-3">
+            {uploading && (
+              <div className="w-full">
+                <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                  <span>Subiendo documentos...</span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="flex justify-stretch sm:justify-end">
+              <button
+                type="button"
+                onClick={handleUpload}
+                className="btn-primary w-full justify-center sm:w-auto"
+                disabled={uploading || files.length === 0 || !company?.id}
+              >
+                {uploading ? `Subiendo (${uploadProgress}%)...` : 'Procesar'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

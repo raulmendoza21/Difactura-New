@@ -43,7 +43,7 @@ api.interceptors.response.use(
       localStorage.removeItem('user');
       localStorage.removeItem('advisory');
       localStorage.removeItem('selectedCompany');
-      window.location.href = '/login';
+      window.dispatchEvent(new Event('auth:expired'));
     }
     return Promise.reject(error);
   }

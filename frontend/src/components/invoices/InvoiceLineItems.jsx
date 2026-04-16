@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { formatCurrency } from '../../utils/formatters';
 import FieldConfidenceHint from './FieldConfidenceHint';
 
-export default function InvoiceLineItems({ lines = [], confidence = null }) {
+export default memo(function InvoiceLineItems({ lines = [], confidence = null }) {
   // Normalize field name: AI returns "importe"/"importe_total", UI uses "subtotal"
   // Also filter out empty lines
   const normalizedLines = lines
@@ -28,14 +29,14 @@ export default function InvoiceLineItems({ lines = [], confidence = null }) {
         <h3 className="text-base font-semibold text-slate-800">Lineas de factura</h3>
         <FieldConfidenceHint value={confidence} label="Lineas de factura" compact />
       </div>
-      <div className="hidden sm:block overflow-x-auto">
+      <div className="hidden sm:block overflow-x-auto max-h-96 overflow-y-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50/80 border-b border-slate-100">
-              <th className="text-left px-5 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Descripcion</th>
-              <th className="text-right px-5 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Cantidad</th>
-              <th className="text-right px-5 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Precio unit.</th>
-              <th className="text-right px-5 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Subtotal</th>
+              <th className="text-left px-5 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0 bg-slate-50/80 z-10">Descripcion</th>
+              <th className="text-right px-5 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0 bg-slate-50/80 z-10">Cantidad</th>
+              <th className="text-right px-5 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0 bg-slate-50/80 z-10">Precio unit.</th>
+              <th className="text-right px-5 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0 bg-slate-50/80 z-10">Subtotal</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
@@ -50,7 +51,7 @@ export default function InvoiceLineItems({ lines = [], confidence = null }) {
           </tbody>
         </table>
       </div>
-      <div className="sm:hidden divide-y divide-slate-100">
+      <div className="sm:hidden divide-y divide-slate-100 max-h-96 overflow-y-auto">
         {normalizedLines.map((line, i) => (
           <div key={line.id || i} className="p-4">
             <p className="text-sm text-slate-700 font-medium">{line.descripcion || '-'}</p>
@@ -63,4 +64,4 @@ export default function InvoiceLineItems({ lines = [], confidence = null }) {
       </div>
     </div>
   );
-}
+})

@@ -1,4 +1,5 @@
 import { createContext, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as authService from '../services/authService';
 
 export const AuthContext = createContext(null);
@@ -37,6 +38,20 @@ export function AuthProvider({ children }) {
     setAdvisory(null);
     setSelectedCompanyState(null);
   };
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleExpired = () => {
+      setUser(null);
+      setAdvisory(null);
+      setSelectedCompanyState(null);
+      navigate('/login', { replace: true });
+    };
+
+    window.addEventListener('auth:expired', handleExpired);
+    return () => window.removeEventListener('auth:expired', handleExpired);
+  }, [navigate]);
 
   const setSelectedCompany = (company) => {
     authService.setSelectedCompany(company);

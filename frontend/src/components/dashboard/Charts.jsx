@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { INVOICE_STATE_LABELS } from '../../utils/constants';
 import InfoPopover from '../common/InfoPopover';
 
@@ -12,7 +13,7 @@ const BAR_COLORS = [
   'bg-indigo-500',
 ];
 
-export default function Charts({ statsByState = {} }) {
+export default memo(function Charts({ statsByState = {} }) {
   const states = Object.entries(statsByState).filter(([, count]) => count > 0);
   const total = states.reduce((sum, [, count]) => sum + count, 0);
   const max = Math.max(...states.map(([, count]) => count), 1);
@@ -74,4 +75,4 @@ export default function Charts({ statsByState = {} }) {
       </div>
     </div>
   );
-}
+})

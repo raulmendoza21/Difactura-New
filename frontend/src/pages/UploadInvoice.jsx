@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import StatusPanel from '../components/common/StatusPanel';
 import CompanySelector from '../components/companies/CompanySelector';
 import InvoiceUploader from '../components/invoices/InvoiceUploader';
 import { useAuth } from '../hooks/useAuth';
-import { getCompanies } from '../services/companyService';
+import { useCompanies } from '../hooks/useCompanies';
 
 const CAPTURE_OPTIONS = [
   'PDF',
@@ -16,32 +15,7 @@ const CAPTURE_OPTIONS = [
 export default function UploadInvoice() {
   const navigate = useNavigate();
   const { selectedCompany, setSelectedCompany, clearSelectedCompany } = useAuth();
-  const [companies, setCompanies] = useState([]);
-  const [companiesLoading, setCompaniesLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-
-    const loadCompanies = async () => {
-      try {
-        const items = await getCompanies();
-        if (!active) return;
-        setCompanies(items);
-      } catch {
-        if (!active) return;
-        setCompanies([]);
-      } finally {
-        if (!active) return;
-        setCompaniesLoading(false);
-      }
-    };
-
-    loadCompanies();
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { companies, loading: companiesLoading } = useCompanies();
 
   const handleCompanyChange = (event) => {
     const companyId = Number(event.target.value);

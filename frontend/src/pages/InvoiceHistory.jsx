@@ -6,7 +6,8 @@ import StatusPanel from '../components/common/StatusPanel';
 import InvoiceTable from '../components/invoices/InvoiceTable';
 import { AuthContext } from '../context/AuthContext';
 import { useInvoices } from '../hooks/useInvoices';
-import { getCompanies } from '../services/companyService';
+import { usePageVisibility } from '../hooks/usePageVisibility';
+import { useCompanies } from '../hooks/useCompanies';
 import { getDashboardStats, reprocessInvoice } from '../services/invoiceService';
 import { INVOICE_STATES, INVOICE_STATE_LABELS } from '../utils/constants';
 
@@ -88,6 +89,8 @@ function getStateButtonClasses(isActive, accent) {
 
 export default function InvoiceHistory() {
   const { advisory, selectedCompany } = useContext(AuthContext);
+  const isPageVisible = usePageVisibility();
+  const { companies, loading: companiesLoading } = useCompanies();
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [showOperationalFilters, setShowOperationalFilters] = useState(false);
   const [stats, setStats] = useState(null);
@@ -95,8 +98,6 @@ export default function InvoiceHistory() {
   const [statsError, setStatsError] = useState('');
   const [feedback, setFeedback] = useState('');
   const [actionInvoiceId, setActionInvoiceId] = useState(null);
-  const [companies, setCompanies] = useState([]);
-  const [companiesLoading, setCompaniesLoading] = useState(true);
   const [operationalFilters, setOperationalFilters] = useState(DEFAULT_OPERATIONAL_FILTERS);
   const { invoices, pagination, loading, error, refetch, updateParams } = useInvoices({
     page: 1,
@@ -104,35 +105,6 @@ export default function InvoiceHistory() {
     sort_by: 'created_at',
     sort_dir: 'desc',
   });
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadCompanies = async () => {
-      setCompaniesLoading(true);
-
-      try {
-        const data = await getCompanies();
-        if (!cancelled) {
-          setCompanies(data);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setStatsError(err.response?.data?.message || 'No se pudieron cargar las empresas cliente');
-        }
-      } finally {
-        if (!cancelled) {
-          setCompaniesLoading(false);
-        }
-      }
-    };
-
-    loadCompanies();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     setOperationalFilters((prev) => ({
@@ -176,13 +148,16 @@ export default function InvoiceHistory() {
     };
 
     syncBoard();
+
+    if (!isPageVisible) return () => { cancelled = true; };
+
     const interval = setInterval(syncBoard, 10000);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [refetch, selectedCompany?.id]);
+  }, [refetch, selectedCompany?.id, isPageVisible]);
 
   const countsByState = useMemo(() => buildStatsMap(stats?.por_estado), [stats]);
 

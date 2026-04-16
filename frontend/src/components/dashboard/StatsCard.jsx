@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import InfoPopover from '../common/InfoPopover';
 
-export default function StatsCard({
+export default memo(function StatsCard({
   title,
   value,
   icon,
@@ -45,4 +46,4 @@ export default function StatsCard({
       </div>
     </div>
   );
-}
+})

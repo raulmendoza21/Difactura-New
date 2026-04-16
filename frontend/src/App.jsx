@@ -1,16 +1,18 @@
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import Navbar from './components/common/Navbar';
 import Sidebar from './components/common/Sidebar';
 import Footer from './components/common/Footer';
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import UploadInvoice from './pages/UploadInvoice';
-import InvoiceReview from './pages/InvoiceReview';
-import InvoiceHistory from './pages/InvoiceHistory';
-import NotFound from './pages/NotFound';
+import LoadingSpinner from './components/common/LoadingSpinner';
 import { useAuth } from './hooks/useAuth';
+
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const UploadInvoice = lazy(() => import('./pages/UploadInvoice'));
+const InvoiceReview = lazy(() => import('./pages/InvoiceReview'));
+const InvoiceHistory = lazy(() => import('./pages/InvoiceHistory'));
+const NotFound = lazy(() => import('./pages/NotFound'));
 
 function AppLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -38,7 +40,8 @@ export default function App() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <Routes>
+    <Suspense fallback={<LoadingSpinner text="Cargando..." />}>
+      <Routes>
       <Route
         path="/login"
         element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
@@ -85,6 +88,7 @@ export default function App() {
       />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<NotFound />} />
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { formatDate, formatDateTime, formatCurrency } from '../../utils/formatters';
 import {
@@ -46,7 +47,7 @@ function getAssociatedCompanyName(invoice) {
   return invoice.empresa_asociada?.nombre || '-';
 }
 
-export default function InvoiceTable({
+export default memo(function InvoiceTable({
   invoices = [],
   scrollable = false,
   maxHeightClass = 'h-[32rem]',
@@ -232,4 +233,4 @@ export default function InvoiceTable({
       </div>
     </div>
   );
-}
+})

@@ -7,7 +7,8 @@ import Charts from '../components/dashboard/Charts';
 import RecentActivity from '../components/dashboard/RecentActivity';
 import StatsCard from '../components/dashboard/StatsCard';
 import { useAuth } from '../hooks/useAuth';
-import { getCompanies } from '../services/companyService';
+import { useCompanies } from '../hooks/useCompanies';
+import { usePageVisibility } from '../hooks/usePageVisibility';
 import { getDashboardStats } from '../services/invoiceService';
 
 function buildStatsMap(items = []) {
@@ -19,37 +20,11 @@ function buildStatsMap(items = []) {
 
 export default function Dashboard() {
   const { advisory, selectedCompany, clearSelectedCompany } = useAuth();
-  const [companies, setCompanies] = useState([]);
+  const isPageVisible = usePageVisibility();
+  const { companies, loading, error } = useCompanies();
   const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [statsError, setStatsError] = useState('');
-
-  useEffect(() => {
-    let active = true;
-
-    const loadCompanies = async () => {
-      try {
-        const items = await getCompanies();
-        if (!active) return;
-        setCompanies(items);
-        setError('');
-      } catch (err) {
-        if (!active) return;
-        setError(err.response?.data?.message || 'No se pudieron cargar las empresas cliente.');
-      } finally {
-        if (!active) return;
-        setLoading(false);
-      }
-    };
-
-    loadCompanies();
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -72,13 +47,15 @@ export default function Dashboard() {
     setStatsLoading(true);
     loadStats();
 
+    if (!isPageVisible) return () => { active = false; };
+
     const interval = setInterval(loadStats, 15000);
 
     return () => {
       active = false;
       clearInterval(interval);
     };
-  }, [selectedCompany?.id]);
+  }, [selectedCompany?.id, isPageVisible]);
 
   useEffect(() => {
     if (loading || companies.length === 0 || !selectedCompany) {

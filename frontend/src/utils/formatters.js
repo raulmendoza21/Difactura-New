@@ -28,9 +28,9 @@ export function formatDateTime(dateStr) {
   }).format(date);
 }
 
-export function formatPercentage(value) {
+export function formatPercentage(value, { isRatio = false } = {}) {
   if (value == null) return '-';
-  const normalized = value <= 1 ? value * 100 : value;
+  const normalized = isRatio ? value * 100 : value;
   return `${Math.round(normalized)}%`;
 }
 
