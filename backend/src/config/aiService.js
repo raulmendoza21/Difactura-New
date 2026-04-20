@@ -14,7 +14,7 @@ function parseAdditionalTaxIds(raw) {
 }
 
 module.exports = {
-  baseUrl: process.env.AI_SERVICE_URL || 'http://ai-service:8000',
+  baseUrl: process.env.AI_SERVICE_URL || 'http://ai-service-vision:8001',
   timeout: parseIntegerEnv('AI_SERVICE_TIMEOUT_MS', 300000),
   retries: parseIntegerEnv('AI_SERVICE_RETRIES', 0),
   additionalTaxIds: parseAdditionalTaxIds(process.env.COMPANY_ADDITIONAL_TAX_IDS),

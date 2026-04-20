@@ -388,7 +388,9 @@ async def process_invoice(
         )
 
     tmp_dir = tempfile.mkdtemp()
-    tmp_path = os.path.join(tmp_dir, file.filename or f"upload{ext}")
+    # Sanitize filename to prevent path traversal
+    safe_name = os.path.basename(file.filename or f"upload{ext}").lstrip(".")
+    tmp_path = os.path.join(tmp_dir, safe_name or f"upload{ext}")
 
     try:
         with open(tmp_path, "wb") as f:
@@ -418,9 +420,9 @@ async def process_invoice(
 
     except ValueError as exc:
         logger.error("Extraction failed for %s: %s", file.filename, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=422, detail="No se pudo extraer datos de la factura")
     except Exception as exc:
         logger.exception("Unexpected error processing %s", file.filename)
-        raise HTTPException(status_code=500, detail=f"Error interno: {exc}")
+        raise HTTPException(status_code=500, detail="Error interno al procesar el documento")
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
