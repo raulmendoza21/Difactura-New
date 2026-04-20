@@ -135,6 +135,7 @@ async function getById(id) {
   return {
     id: factura.id,
     cliente_id: factura.cliente_id,
+    asesoria_id: factura.asesoria_id || null,
     estado: factura.estado,
     confianza_ia: factura.confianza_ia,
     validado_por: factura.validado_por,
@@ -210,15 +211,19 @@ async function reprocess(id, userId, ip) {
     throw new NotFoundError('Factura no encontrada');
   }
 
-  const staleCutoffDate = new Date(Date.now() - processingConfig.jobStaleMs);
-  await invoiceRepo.requeueStaleJobs(staleCutoffDate, {
-    facturaId: id,
-    maxRecoveries: processingConfig.maxRecoveries,
-  });
-
+  // Check for active jobs FIRST, before requeuing stale ones
   const latestJob = await invoiceRepo.findJobByFactura(id);
   if (latestJob && [JOB_STATES.PENDIENTE, JOB_STATES.EN_PROCESO].includes(latestJob.estado)) {
-    throw new ValidationError('La factura ya tiene un procesamiento en curso');
+    // If job is in EN_PROCESO but stale, requeue it and proceed
+    const staleCutoffDate = new Date(Date.now() - processingConfig.jobStaleMs);
+    if (latestJob.estado === JOB_STATES.EN_PROCESO && new Date(latestJob.updated_at) < staleCutoffDate) {
+      await invoiceRepo.requeueStaleJobs(staleCutoffDate, {
+        facturaId: id,
+        maxRecoveries: processingConfig.maxRecoveries,
+      });
+    } else {
+      throw new ValidationError('La factura ya tiene un procesamiento en curso');
+    }
   }
 
   await invoiceRepo.update(id, {

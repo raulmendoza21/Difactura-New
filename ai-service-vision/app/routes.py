@@ -1,4 +1,4 @@
-"""API routes — /ai/process emitting the same contract as the v2 engine."""
+"""API routes — /ai/process."""
 
 from __future__ import annotations
 

@@ -162,7 +162,7 @@ async function findAll({
 async function findById(id) {
   const result = await db.query(
     `SELECT f.*,
-            c.nombre AS cliente_nombre, c.cif AS cliente_cif,
+            c.nombre AS cliente_nombre, c.cif AS cliente_cif, c.asesoria_id AS asesoria_id,
             u.nombre AS validado_por_nombre
      FROM facturas f
      LEFT JOIN clientes c ON f.cliente_id = c.id
@@ -189,7 +189,7 @@ async function update(id, data) {
   let paramIndex = 1;
 
   const allowedFields = [
-    'estado', 'confianza_ia', 'validado_por', 'fecha_procesado', 'documento_json',
+    'estado', 'confianza_ia', 'validado_por', 'fecha_procesado', 'documento_json', 'notas',
   ];
 
   for (const field of allowedFields) {

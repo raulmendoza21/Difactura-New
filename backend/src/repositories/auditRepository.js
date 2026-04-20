@@ -34,7 +34,22 @@ async function findLatestByFacturaAndAction(facturaId, action) {
   return result.rows[0] || null;
 }
 
-async function findRecent(limit = 20) {
+async function findRecent(limit = 20, asesoriaId = null) {
+  if (asesoriaId) {
+    const result = await db.query(
+      `SELECT a.*, u.nombre AS usuario_nombre,
+              f.documento_json->>'numero_factura' AS numero_factura
+       FROM auditoria_procesos a
+       LEFT JOIN usuarios u ON a.usuario_id = u.id
+       LEFT JOIN facturas f ON a.factura_id = f.id
+       LEFT JOIN clientes c ON f.cliente_id = c.id
+       WHERE c.asesoria_id = $2
+       ORDER BY a.created_at DESC
+       LIMIT $1`,
+      [limit, asesoriaId]
+    );
+    return result.rows;
+  }
   const result = await db.query(
     `SELECT a.*, u.nombre AS usuario_nombre,
             f.documento_json->>'numero_factura' AS numero_factura

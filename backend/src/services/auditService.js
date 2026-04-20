@@ -18,8 +18,8 @@ async function getLatestByFacturaAndAction(facturaId, action) {
   return auditRepo.findLatestByFacturaAndAction(facturaId, action);
 }
 
-async function getRecent(limit) {
-  return auditRepo.findRecent(limit);
+async function getRecent(limit, asesoriaId = null) {
+  return auditRepo.findRecent(limit, asesoriaId);
 }
 
 module.exports = { log, getByFactura, getLatestByFacturaAndAction, getRecent };

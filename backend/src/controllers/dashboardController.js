@@ -8,7 +8,7 @@ async function getStats(req, res, next) {
       req.user.asesoria_id,
       Number.isNaN(companyId) ? undefined : companyId
     );
-    const recentActivity = await auditService.getRecent(10);
+    const recentActivity = await auditService.getRecent(10, req.user.asesoria_id);
 
     const totalFacturas = estados.reduce((sum, e) => sum + e.count, 0);
     const procesadasIa = estados.find((e) => e.estado === 'PROCESADA_IA');

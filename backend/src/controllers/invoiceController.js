@@ -12,6 +12,15 @@ function assertEmpresaAccess(user, factura) {
   }
 }
 
+/**
+ * Asesoria users can only access invoices from their own asesoria.
+ */
+function assertAsesoriaAccess(user, factura) {
+  if (user.asesoria_id && factura.asesoria_id && factura.asesoria_id !== user.asesoria_id) {
+    throw new ForbiddenError('No tienes acceso a esta factura');
+  }
+}
+
 async function upload(req, res, next) {
   try {
     const files = [
@@ -85,6 +94,7 @@ async function getById(req, res, next) {
   try {
     const factura = await invoiceService.getById(parseInt(req.params.id, 10));
     assertEmpresaAccess(req.user, factura);
+    assertAsesoriaAccess(req.user, factura);
     res.json(factura);
   } catch (err) {
     next(err);
@@ -94,6 +104,12 @@ async function getById(req, res, next) {
 async function getDocumentFile(req, res, next) {
   try {
     const document = await invoiceService.getDocumentFile(parseInt(req.params.documentId, 10));
+    // Verify the user has access to the factura that owns this document
+    if (document.factura_id) {
+      const factura = await invoiceService.getById(document.factura_id);
+      assertEmpresaAccess(req.user, factura);
+      assertAsesoriaAccess(req.user, factura);
+    }
     res.type(document.tipo_mime);
     res.sendFile(document.ruta_storage);
   } catch (err) {

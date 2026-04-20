@@ -27,6 +27,13 @@ const server = app.listen(PORT, async () => {
 async function shutdown(signal) {
   console.log(`${signal} recibido. Cerrando servicios...`);
 
+  // Safety timeout to force exit if graceful shutdown hangs
+  const forceTimeout = setTimeout(() => {
+    console.error('Shutdown forzado por timeout');
+    process.exit(1);
+  }, 10000);
+  forceTimeout.unref();
+
   try {
     await processingWorkerService.stop();
   } catch (error) {

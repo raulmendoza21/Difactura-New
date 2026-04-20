@@ -16,6 +16,14 @@ function errorHandler(err, req, res, next) {
     });
   }
 
+  // Error de fileFilter (tipo de archivo no permitido)
+  if (err.message && err.message.startsWith('Tipo de archivo no permitido')) {
+    return res.status(400).json({
+      error: true,
+      message: err.message,
+    });
+  }
+
   console.error('Error no controlado:', err);
 
   res.status(500).json({

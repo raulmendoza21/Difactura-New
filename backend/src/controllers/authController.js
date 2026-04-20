@@ -8,17 +8,13 @@ const userRepository = require('../repositories/userRepository');
 async function login(req, res, next) {
   try {
     const { email, password } = req.body;
-    console.log('[LOGIN DEBUG] email:', JSON.stringify(email), '| password:', JSON.stringify(password), '| length:', password?.length);
     const user = await userRepository.findActiveByEmailWithAdvisory(email);
 
     if (!user) {
-      console.log('[LOGIN DEBUG] User NOT found for email:', email);
       throw new UnauthorizedError('Credenciales invalidas');
     }
 
-    console.log('[LOGIN DEBUG] User found:', user.email, '| hash prefix:', user.password_hash?.substring(0, 20));
     const validPassword = await bcrypt.compare(password, user.password_hash);
-    console.log('[LOGIN DEBUG] bcrypt result:', validPassword);
     if (!validPassword) {
       throw new UnauthorizedError('Credenciales invalidas');
     }
