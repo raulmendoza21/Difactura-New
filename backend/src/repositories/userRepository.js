@@ -9,12 +9,17 @@ const USER_WITH_ADVISORY_SELECT = `
     u.nombre,
     u.rol,
     u.activo,
+    u.tipo_usuario,
+    u.cliente_id,
     u.created_at,
     a.id AS advisory_id,
     a.nombre AS advisory_nombre,
-    a.estado AS advisory_estado
+    a.estado AS advisory_estado,
+    c.nombre AS cliente_nombre,
+    c.cif AS cliente_cif
   FROM usuarios u
   INNER JOIN asesorias a ON a.id = u.asesoria_id
+  LEFT JOIN clientes c ON c.id = u.cliente_id
 `;
 
 async function findActiveByEmailWithAdvisory(email) {
@@ -43,8 +48,19 @@ async function createWithinAdvisory({ asesoriaId, email, passwordHash, nombre, r
   const result = await db.query(
     `INSERT INTO usuarios (asesoria_id, email, password_hash, nombre, rol)
      VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, asesoria_id, email, nombre, rol, activo, created_at`,
+     RETURNING id, asesoria_id, email, nombre, rol, tipo_usuario, cliente_id, activo, created_at`,
     [asesoriaId, email, passwordHash, nombre, rol]
+  );
+
+  return result.rows[0];
+}
+
+async function createEmpresaUser({ asesoriaId, clienteId, email, passwordHash, nombre }) {
+  const result = await db.query(
+    `INSERT INTO usuarios (asesoria_id, cliente_id, email, password_hash, nombre, rol, tipo_usuario)
+     VALUES ($1, $2, $3, $4, $5, 'EMPRESA_UPLOAD', 'EMPRESA')
+     RETURNING id, asesoria_id, cliente_id, email, nombre, rol, tipo_usuario, activo, created_at`,
+    [asesoriaId, clienteId, email, passwordHash, nombre]
   );
 
   return result.rows[0];
@@ -54,4 +70,5 @@ module.exports = {
   findActiveByEmailWithAdvisory,
   findByIdWithAdvisory,
   createWithinAdvisory,
+  createEmpresaUser,
 };

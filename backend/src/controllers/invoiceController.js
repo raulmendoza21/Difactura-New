@@ -1,4 +1,16 @@
 const invoiceService = require('../services/invoiceService');
+const { ForbiddenError } = require('../utils/errors');
+
+/**
+ * Empresa users can only access invoices from their own company.
+ */
+function assertEmpresaAccess(user, factura) {
+  if (user.tipo_usuario === 'EMPRESA' && user.cliente_id) {
+    if (factura.cliente_id !== user.cliente_id) {
+      throw new ForbiddenError('No tienes acceso a esta factura');
+    }
+  }
+}
 
 async function upload(req, res, next) {
   try {
@@ -12,7 +24,14 @@ async function upload(req, res, next) {
       return res.status(400).json({ error: true, message: 'No se ha proporcionado ningun archivo' });
     }
 
-    const companyId = parseInt(req.body.company_id || req.headers['x-company-id'], 10);
+    // Empresa users are forced to their own company
+    let companyId;
+    if (req.user.tipo_usuario === 'EMPRESA' && req.user.cliente_id) {
+      companyId = req.user.cliente_id;
+    } else {
+      companyId = parseInt(req.body.company_id || req.headers['x-company-id'], 10);
+    }
+
     const channel = req.body.channel || 'web';
 
     const result = await invoiceService.uploadBatch(files, {
@@ -33,9 +52,17 @@ async function getAll(req, res, next) {
   try {
     const { estado, page, limit, company_id, channel, batch_id, search, sort_by, sort_dir } = req.query;
     const companyHeaderId = parseInt(req.headers['x-company-id'], 10);
-    const parsedCompanyId = company_id
-      ? parseInt(company_id, 10)
-      : (Number.isNaN(companyHeaderId) ? undefined : companyHeaderId);
+
+    // Empresa users are forced to their own company
+    let parsedCompanyId;
+    if (req.user.tipo_usuario === 'EMPRESA' && req.user.cliente_id) {
+      parsedCompanyId = req.user.cliente_id;
+    } else {
+      parsedCompanyId = company_id
+        ? parseInt(company_id, 10)
+        : (Number.isNaN(companyHeaderId) ? undefined : companyHeaderId);
+    }
+
     const result = await invoiceService.getAll({
       asesoriaId: req.user.asesoria_id,
       estado,
@@ -57,6 +84,7 @@ async function getAll(req, res, next) {
 async function getById(req, res, next) {
   try {
     const factura = await invoiceService.getById(parseInt(req.params.id, 10));
+    assertEmpresaAccess(req.user, factura);
     res.json(factura);
   } catch (err) {
     next(err);

@@ -28,7 +28,14 @@ export function AuthProvider({ children }) {
     const data = await authService.login(email, password);
     setUser(data.user);
     setAdvisory(data.advisory);
-    setSelectedCompanyState(null);
+
+    // Empresa users get their company auto-selected and locked
+    if (data.user?.tipo_usuario === 'EMPRESA' && data.company) {
+      setSelectedCompanyState(data.company);
+    } else {
+      setSelectedCompanyState(null);
+    }
+
     return data;
   };
 
@@ -53,12 +60,18 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('auth:expired', handleExpired);
   }, [navigate]);
 
+  const isEmpresaUser = user?.tipo_usuario === 'EMPRESA';
+
   const setSelectedCompany = (company) => {
+    // Empresa users cannot change their company
+    if (isEmpresaUser) return;
     authService.setSelectedCompany(company);
     setSelectedCompanyState(company);
   };
 
   const clearSelectedCompany = () => {
+    // Empresa users cannot clear their company
+    if (isEmpresaUser) return;
     authService.clearSelectedCompany();
     setSelectedCompanyState(null);
   };
@@ -73,6 +86,7 @@ export function AuthProvider({ children }) {
     setSelectedCompany,
     clearSelectedCompany,
     isAuthenticated: !!user,
+    isEmpresaUser,
   };
 
   return (

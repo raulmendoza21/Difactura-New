@@ -53,6 +53,7 @@ export default memo(function InvoiceTable({
   maxHeightClass = 'h-[32rem]',
   onReprocess,
   actionInvoiceId = null,
+  isEmpresaUser = false,
 }) {
   if (invoices.length === 0) {
     return (
@@ -87,9 +88,15 @@ export default memo(function InvoiceTable({
               <tr key={invoice.id} className="hover:bg-slate-50/50 transition-colors">
                 <td className="px-5 py-3.5">
                   <div className="space-y-1">
-                    <Link to={`/invoices/review/${invoice.id}`} className="font-semibold text-blue-600 hover:text-blue-800">
-                      {invoice.documento_json?.numero_factura || `#${invoice.id}`}
-                    </Link>
+                    {isEmpresaUser ? (
+                      <span className="font-semibold text-slate-800">
+                        {invoice.documento_json?.numero_factura || `#${invoice.id}`}
+                      </span>
+                    ) : (
+                      <Link to={`/invoices/review/${invoice.id}`} className="font-semibold text-blue-600 hover:text-blue-800">
+                        {invoice.documento_json?.numero_factura || `#${invoice.id}`}
+                      </Link>
+                    )}
                     <p className="text-xs text-slate-400">
                       {invoice.documento?.nombre_archivo || `Documento #${invoice.id}`}
                     </p>
@@ -152,9 +159,11 @@ export default memo(function InvoiceTable({
                 </td>
                 <td className="px-5 py-3.5">
                   <div className="flex items-center justify-end gap-2">
-                    <Link to={`/invoices/review/${invoice.id}`} className="btn-secondary px-3 py-1.5 text-xs">
-                      Abrir
-                    </Link>
+                    {!isEmpresaUser && (
+                      <Link to={`/invoices/review/${invoice.id}`} className="btn-secondary px-3 py-1.5 text-xs">
+                        Abrir
+                      </Link>
+                    )}
                     {onReprocess && canReprocess(invoice) && (
                       <button
                         type="button"
@@ -176,6 +185,36 @@ export default memo(function InvoiceTable({
       <div className={`md:hidden divide-y divide-slate-100 ${scrollable ? `${maxHeightClass} overflow-y-scroll` : ''}`}>
         {invoices.map((invoice) => (
           <div key={invoice.id} className="p-4 hover:bg-slate-50 transition-colors space-y-3">
+            {isEmpresaUser ? (
+              <div>
+                <div className="flex items-center justify-between mb-2 gap-3">
+                  <span className="font-semibold text-slate-800">{invoice.documento_json?.numero_factura || `#${invoice.id}`}</span>
+                  <span className={`badge ${INVOICE_STATE_COLORS[invoice.estado] || 'bg-slate-100 text-slate-600'}`}>
+                    {INVOICE_STATE_LABELS[invoice.estado] || invoice.estado}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-600 truncate">{getCounterpartyName(invoice)}</p>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-sm font-semibold text-slate-800">{formatCurrency(invoice.documento_json?.total)}</span>
+                  <span className="text-xs text-slate-400">{formatDate(getInvoiceDate(invoice))}</span>
+                </div>
+                {invoice.job && (
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <span className={`badge ${JOB_STATE_COLORS[invoice.job.estado] || 'bg-slate-100 text-slate-600'}`}>
+                      {JOB_STATE_LABELS[invoice.job.estado] || invoice.job.estado}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      {invoice.job.finished_at
+                        ? formatDateTime(invoice.job.finished_at)
+                        : invoice.job.started_at
+                          ? formatDateTime(invoice.job.started_at)
+                          : 'En cola'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+            <>
             <Link to={`/invoices/review/${invoice.id}`} className="block">
               <div className="flex items-center justify-between mb-2 gap-3">
                 <span className="font-semibold text-blue-600">{invoice.documento_json?.numero_factura || `#${invoice.id}`}</span>
@@ -228,6 +267,8 @@ export default memo(function InvoiceTable({
                 </button>
               )}
             </div>
+            </>
+            )}
           </div>
         ))}
       </div>

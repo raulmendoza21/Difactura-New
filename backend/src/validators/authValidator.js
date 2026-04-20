@@ -29,7 +29,7 @@ function validateRegister(req, res, next) {
     return next(new ValidationError('La contraseña debe tener al menos 6 caracteres'));
   }
 
-  const validRoles = ['ADMIN', 'CONTABILIDAD', 'REVISOR', 'LECTURA'];
+  const validRoles = ['ADMIN', 'CONTABILIDAD', 'REVISOR', 'LECTURA', 'EMPRESA_UPLOAD'];
   if (rol && !validRoles.includes(rol)) {
     return next(new ValidationError(`Rol inválido. Valores permitidos: ${validRoles.join(', ')}`));
   }

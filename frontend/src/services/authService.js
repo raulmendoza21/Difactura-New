@@ -34,7 +34,14 @@ export async function login(email, password) {
   localStorage.setItem(STORAGE_KEYS.token, data.token);
   writeJson(STORAGE_KEYS.user, data.user);
   writeJson(STORAGE_KEYS.advisory, data.advisory);
-  localStorage.removeItem(STORAGE_KEYS.selectedCompany);
+
+  // Empresa users get their company auto-selected
+  if (data.user?.tipo_usuario === 'EMPRESA' && data.company) {
+    writeJson(STORAGE_KEYS.selectedCompany, data.company);
+  } else {
+    localStorage.removeItem(STORAGE_KEYS.selectedCompany);
+  }
+
   return data;
 }
 

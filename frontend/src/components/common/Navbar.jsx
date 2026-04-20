@@ -3,7 +3,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useCompanies } from '../../hooks/useCompanies';
 
 export default function Navbar({ onToggleSidebar }) {
-  const { user, advisory, selectedCompany, setSelectedCompany, clearSelectedCompany, logout } = useAuth();
+  const { user, advisory, selectedCompany, setSelectedCompany, clearSelectedCompany, logout, isEmpresaUser } = useAuth();
   const { companies, loading: companiesLoading } = useCompanies();
 
   const handleCompanyChange = (event) => {
@@ -33,23 +33,38 @@ export default function Navbar({ onToggleSidebar }) {
         </button>
 
         <div className="min-w-0 mr-4">
-          <p className="text-sm font-semibold text-slate-800 truncate">
-            {advisory?.nombre || 'Asesoria'}
-          </p>
-          <p className="text-xs text-slate-500 truncate">
-            {selectedCompany?.nombre || 'Contexto global de asesoria'}
-          </p>
+          {isEmpresaUser ? (
+            <>
+              <p className="text-sm font-semibold text-slate-800 truncate">
+                {selectedCompany?.nombre || 'Mi empresa'}
+              </p>
+              <p className="text-xs text-slate-500 truncate">
+                Portal empresa
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-slate-800 truncate">
+                {advisory?.nombre || 'Asesoria'}
+              </p>
+              <p className="text-xs text-slate-500 truncate">
+                {selectedCompany?.nombre || 'Contexto global de asesoria'}
+              </p>
+            </>
+          )}
         </div>
 
-        <div className="hidden md:block">
-          <CompanySelector
-            companies={companies}
-            value={selectedCompany?.id || ''}
-            onChange={handleCompanyChange}
-            loading={companiesLoading}
-            variant="topbar"
-          />
-        </div>
+        {!isEmpresaUser && (
+          <div className="hidden md:block">
+            <CompanySelector
+              companies={companies}
+              value={selectedCompany?.id || ''}
+              onChange={handleCompanyChange}
+              loading={companiesLoading}
+              variant="topbar"
+            />
+          </div>
+        )}
 
         <div className="flex-1" />
 
@@ -73,15 +88,17 @@ export default function Navbar({ onToggleSidebar }) {
         </div>
       </div>
 
-      <div className="border-t border-slate-200/60 px-4 py-3 md:hidden sm:px-6">
-        <CompanySelector
-          companies={companies}
-          value={selectedCompany?.id || ''}
-          onChange={handleCompanyChange}
-          loading={companiesLoading}
-          variant="topbar-mobile"
-        />
-      </div>
+      {!isEmpresaUser && (
+        <div className="border-t border-slate-200/60 px-4 py-3 md:hidden sm:px-6">
+          <CompanySelector
+            companies={companies}
+            value={selectedCompany?.id || ''}
+            onChange={handleCompanyChange}
+            loading={companiesLoading}
+            variant="topbar-mobile"
+          />
+        </div>
+      )}
     </header>
   );
 }

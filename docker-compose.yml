@@ -16,6 +16,9 @@ services:
       - ./database/schema/001_create_tables.sql:/docker-entrypoint-initdb.d/02-tables.sql
       - ./database/schema/002_create_indexes.sql:/docker-entrypoint-initdb.d/03-indexes.sql
       - ./database/schema/003_seed_data.sql:/docker-entrypoint-initdb.d/04-seed.sql
+      - ./database/schema/004_json_persistence.sql:/docker-entrypoint-initdb.d/05-json-persistence.sql
+      - ./database/schema/005_empresa_users.sql:/docker-entrypoint-initdb.d/06-empresa-users.sql
+      - ./database/schema/006_seed_empresa_user.sql:/docker-entrypoint-initdb.d/07-seed-empresa.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -65,77 +68,11 @@ services:
     networks:
       - difactura-net
 
-  # Motor documental v2
-  ai-service:
-    build:
-      context: ./ai-service-v2
-      dockerfile: Dockerfile
-    container_name: difactura-ai
-    restart: unless-stopped
-    environment:
-      TESSERACT_PATH: /usr/bin/tesseract
-      OCR_LANGUAGE: spa
-      PADDLE_OCR_ENABLED: ${PADDLE_OCR_ENABLED:-true}
-      PADDLE_TEXT_DET_LIMIT_SIDE_LEN: ${PADDLE_TEXT_DET_LIMIT_SIDE_LEN:-2500}
-      DOCUMENT_PARSER_PROVIDER: ${DOCUMENT_PARSER_PROVIDER:-local}
-      DOCUMENT_PARSER_FORCE_PROVIDER: ${DOCUMENT_PARSER_FORCE_PROVIDER:-}
-      DOCUMENT_PARSER_FALLBACK_ENABLED: ${DOCUMENT_PARSER_FALLBACK_ENABLED:-true}
-      DOCUMENT_PARSER_FALLBACK_PROVIDER: ${DOCUMENT_PARSER_FALLBACK_PROVIDER:-local}
-      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
-      MISTRAL_BASE_URL: ${MISTRAL_BASE_URL:-https://api.mistral.ai}
-      MISTRAL_OCR_MODEL: ${MISTRAL_OCR_MODEL:-mistral-ocr-latest}
-      MISTRAL_FILE_VISIBILITY: ${MISTRAL_FILE_VISIBILITY:-workspace}
-      MISTRAL_EXTRACT_HEADER: ${MISTRAL_EXTRACT_HEADER:-true}
-      MISTRAL_EXTRACT_FOOTER: ${MISTRAL_EXTRACT_FOOTER:-true}
-      MISTRAL_TABLE_FORMAT: ${MISTRAL_TABLE_FORMAT:-markdown}
-      DOC_AI_ENABLED: ${DOC_AI_ENABLED:-false}
-      DOC_AI_PROVIDER: ${DOC_AI_PROVIDER:-openai}
-      DOC_AI_BASE_URL: ${DOC_AI_BASE_URL:-https://api.openai.com}
-      DOC_AI_API_KEY: ${DOC_AI_API_KEY:-}
-      DOC_AI_MODEL: ${DOC_AI_MODEL:-gpt-4.1-mini}
-      DOC_AI_TIMEOUT_SECONDS: ${DOC_AI_TIMEOUT_SECONDS:-30}
-      DOC_AI_FALLBACK_CONFIDENCE_THRESHOLD: ${DOC_AI_FALLBACK_CONFIDENCE_THRESHOLD:-0.48}
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./ai-service-v2/app:/app/app
-      - ./storage:/app/storage
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - difactura-net
-
-  # Motor visual — OpenAI Vision directo (sin OCR local, sin GPU)
-  ai-vision:
-    build:
-      context: ./ai-service-vision
-      dockerfile: Dockerfile
-    container_name: difactura-ai-vision
-    restart: unless-stopped
-    environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
-      OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-120}
-      MAX_PAGES: ${VISION_MAX_PAGES:-8}
-      IMAGE_DPI: ${VISION_IMAGE_DPI:-150}
-    ports:
-      - "8001:8001"
-    volumes:
-      - ./ai-service-vision/app:/app/app
-      - ./storage:/app/storage
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-    networks:
-      - difactura-net
+  # Motor documental v2 (desactivado — directorio no disponible)
+  # ai-service:
+  #   build:
+  #     context: ./ai-service-v2
+  #     dockerfile: Dockerfile
 
   # Frontend de desarrollo
   frontend:
@@ -167,7 +104,6 @@ services:
       - "80:80"
     depends_on:
       - backend
-      - ai-service
       - frontend
     networks:
       - difactura-net

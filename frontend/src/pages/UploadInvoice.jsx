@@ -14,7 +14,7 @@ const CAPTURE_OPTIONS = [
 
 export default function UploadInvoice() {
   const navigate = useNavigate();
-  const { selectedCompany, setSelectedCompany, clearSelectedCompany } = useAuth();
+  const { selectedCompany, setSelectedCompany, clearSelectedCompany, isEmpresaUser } = useAuth();
   const { companies, loading: companiesLoading } = useCompanies();
 
   const handleCompanyChange = (event) => {
@@ -66,14 +66,16 @@ export default function UploadInvoice() {
             <Link to="/invoices" className="btn-primary justify-center text-center">
               Abrir bandeja documental
             </Link>
-            <Link to="/dashboard" className="btn-secondary justify-center text-center">
-              Volver al centro operativo
-            </Link>
+            {!isEmpresaUser && (
+              <Link to="/dashboard" className="btn-secondary justify-center text-center">
+                Volver al centro operativo
+              </Link>
+            )}
           </div>
         </div>
       </section>
 
-      {!selectedCompany && (
+      {!isEmpresaUser && !selectedCompany && (
         <StatusPanel
           tone="warning"
           eyebrow="Empresa requerida"
@@ -83,17 +85,32 @@ export default function UploadInvoice() {
         />
       )}
 
-      <CompanySelector
-        companies={companies}
-        value={selectedCompany?.id || ''}
-        onChange={handleCompanyChange}
-        loading={companiesLoading}
-      />
+      {!isEmpresaUser && (
+        <CompanySelector
+          companies={companies}
+          value={selectedCompany?.id || ''}
+          onChange={handleCompanyChange}
+          loading={companiesLoading}
+        />
+      )}
+
+      {isEmpresaUser && selectedCompany && (
+        <StatusPanel
+          tone="info"
+          eyebrow="Tu empresa"
+          title={selectedCompany.nombre}
+          description="Los documentos subidos se asociaran automaticamente a tu empresa."
+          compact
+        />
+      )}
 
       <InvoiceUploader
         company={selectedCompany}
         onUploaded={(result) => {
-          if (result?.summary?.accepted === 1) {
+          if (isEmpresaUser) {
+            // Empresa users always go to invoice list
+            setTimeout(() => navigate('/invoices'), 1200);
+          } else if (result?.summary?.accepted === 1) {
             const firstAccepted = result.documents?.find((document) => document.status === 'queued');
             if (firstAccepted?.factura?.id) {
               setTimeout(() => navigate(`/invoices/review/${firstAccepted.factura.id}`), 1200);

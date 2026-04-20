@@ -6,23 +6,23 @@
 INSERT INTO asesorias (nombre, estado)
 VALUES ('Asesoria Central Demo', 'ACTIVA');
 
--- Usuario administrador demo
+-- Usuario administrador demo (password: admin123)
 INSERT INTO usuarios (asesoria_id, email, password_hash, nombre, rol, activo)
 VALUES (
     1,
     'admin@local.test',
-    '$2b$12$5aap1aYXHgkfxIh4KPCY2utktsLMW6oMcGIV9ojks8MJbsU3kiAH6',
+    '$2b$12$N2iD5GeUvevibyMieL2jYelSA2tQwwVXx4YkV9xE19UrgNqzP86Bm',
     'Administrador',
     'ADMIN',
     TRUE
 );
 
--- Usuario revisor demo
+-- Usuario revisor demo (password: admin123)
 INSERT INTO usuarios (asesoria_id, email, password_hash, nombre, rol, activo)
 VALUES (
     1,
     'revisor@local.test',
-    '$2b$12$5aap1aYXHgkfxIh4KPCY2utktsLMW6oMcGIV9ojks8MJbsU3kiAH6',
+    '$2b$12$N2iD5GeUvevibyMieL2jYelSA2tQwwVXx4YkV9xE19UrgNqzP86Bm',
     'Revisor Demo',
     'REVISOR',
     TRUE
@@ -37,3 +37,8 @@ INSERT INTO proveedores (nombre, nombre_normalizado, cif, direccion, email, tele
 -- Empresa cliente base
 INSERT INTO clientes (asesoria_id, nombre, nombre_normalizado, cif, direccion, email, telefono, estado) VALUES
 (1, 'Disoft Servicios SL', 'DISOFT', 'B35222249', 'Calle Ejemplo 15, Las Palmas de Gran Canaria', 'administracion@cliente-demo.test', '928000000', 'ACTIVA');
+
+-- Usuario empresa demo (empleado de Disoft que puede subir documentos)
+-- NOTA: este INSERT usa columnas que se crean en 005_empresa_users.sql,
+--       por lo que se ejecuta desde un fichero seed posterior.
+

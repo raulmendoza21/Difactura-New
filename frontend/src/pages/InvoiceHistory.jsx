@@ -88,7 +88,7 @@ function getStateButtonClasses(isActive, accent) {
 }
 
 export default function InvoiceHistory() {
-  const { advisory, selectedCompany } = useContext(AuthContext);
+  const { advisory, selectedCompany, isEmpresaUser } = useContext(AuthContext);
   const isPageVisible = usePageVisibility();
   const { companies, loading: companiesLoading } = useCompanies();
   const [selectedFilter, setSelectedFilter] = useState('all');
@@ -144,7 +144,11 @@ export default function InvoiceHistory() {
     };
 
     const syncBoard = async () => {
-      await Promise.allSettled([loadStats(), refetch()]);
+      if (isEmpresaUser) {
+        await refetch();
+      } else {
+        await Promise.allSettled([loadStats(), refetch()]);
+      }
     };
 
     syncBoard();
@@ -334,7 +338,7 @@ export default function InvoiceHistory() {
         />
       )}
 
-      {!selectedCompany && (
+      {!isEmpresaUser && !selectedCompany && (
         <StatusPanel
           tone="warning"
           eyebrow="Empresa activa"
@@ -563,8 +567,9 @@ export default function InvoiceHistory() {
               <InvoiceTable
                 invoices={invoices}
                 scrollable
-                onReprocess={handleReprocess}
+                onReprocess={isEmpresaUser ? undefined : handleReprocess}
                 actionInvoiceId={actionInvoiceId}
+                isEmpresaUser={isEmpresaUser}
               />
 
               {invoices.length === 0 && (

@@ -37,19 +37,21 @@ function AppLayout({ children }) {
 }
 
 export default function App() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isEmpresaUser } = useAuth();
+
+  const defaultRoute = isEmpresaUser ? '/invoices/upload' : '/dashboard';
 
   return (
     <Suspense fallback={<LoadingSpinner text="Cargando..." />}>
       <Routes>
       <Route
         path="/login"
-        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
+        element={isAuthenticated ? <Navigate to={defaultRoute} replace /> : <Login />}
       />
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute asesoriaOnly>
             <AppLayout><Dashboard /></AppLayout>
           </ProtectedRoute>
         }
@@ -57,7 +59,7 @@ export default function App() {
       <Route
         path="/invoices/upload"
         element={
-          <ProtectedRoute roles={['ADMIN', 'CONTABILIDAD']}>
+          <ProtectedRoute roles={['ADMIN', 'CONTABILIDAD', 'EMPRESA_UPLOAD']}>
             <AppLayout><UploadInvoice /></AppLayout>
           </ProtectedRoute>
         }
@@ -65,7 +67,7 @@ export default function App() {
       <Route
         path="/review-queue"
         element={
-          <ProtectedRoute roles={['ADMIN', 'CONTABILIDAD', 'REVISOR']}>
+          <ProtectedRoute roles={['ADMIN', 'CONTABILIDAD', 'REVISOR']} asesoriaOnly>
             <Navigate to="/invoices" replace />
           </ProtectedRoute>
         }
@@ -73,7 +75,7 @@ export default function App() {
       <Route
         path="/invoices/review/:id"
         element={
-          <ProtectedRoute roles={['ADMIN', 'CONTABILIDAD', 'REVISOR']}>
+          <ProtectedRoute roles={['ADMIN', 'CONTABILIDAD', 'REVISOR']} asesoriaOnly>
             <AppLayout><InvoiceReview /></AppLayout>
           </ProtectedRoute>
         }
@@ -86,7 +88,7 @@ export default function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<Navigate to={defaultRoute} replace />} />
       <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>
