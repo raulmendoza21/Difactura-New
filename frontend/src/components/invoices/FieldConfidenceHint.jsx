@@ -1,5 +1,7 @@
+import { CONFIDENCE_THRESHOLDS_RATIO } from '../../utils/constants';
+
 export function isFieldSuspicious(value) {
-  return typeof value === 'number' && value < 0.85;
+  return typeof value === 'number' && value < CONFIDENCE_THRESHOLDS_RATIO.SUSPICIOUS;
 }
 
 export function getFieldInputClass(value) {

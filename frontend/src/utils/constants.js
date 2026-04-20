@@ -81,5 +81,11 @@ export const CONFIDENCE_THRESHOLDS = {
   MEDIUM: 70,
 };
 
+export const CONFIDENCE_THRESHOLDS_RATIO = {
+  HIGH: 0.90,
+  MEDIUM: 0.70,
+  SUSPICIOUS: 0.85,
+};
+
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export const ALLOWED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff'];

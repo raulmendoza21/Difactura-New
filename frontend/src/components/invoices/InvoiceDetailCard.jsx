@@ -1,6 +1,7 @@
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { INVOICE_STATE_COLORS, INVOICE_STATE_LABELS } from '../../utils/constants';
 import ConfidenceBadge from '../common/ConfidenceBadge';
+import { isFieldSuspicious } from './FieldConfidenceHint';
 
 const OPERATION_SIDE_LABELS = {
   compra: 'Compra',
@@ -8,11 +9,46 @@ const OPERATION_SIDE_LABELS = {
   unknown: 'Desconocido',
 };
 
+// Map display fields → field_confidence keys
+const FIELD_CONFIDENCE_MAP = {
+  'Numero': 'numero_factura',
+  'Fecha factura': 'fecha',
+  'Emisor': 'proveedor',
+  'NIF emisor': 'cif_proveedor',
+  'Receptor': 'cliente',
+  'NIF receptor': 'cif_cliente',
+  'Base imponible': 'base_imponible',
+  'Total': 'total',
+};
+
+function FieldIndicator({ confidence, isMissing, isInferred }) {
+  if (isMissing) {
+    return (
+      <span
+        title="Dato no detectado en el documento"
+        className="inline-block ml-1.5 h-2.5 w-2.5 rounded-full bg-red-400 ring-2 ring-red-100"
+      />
+    );
+  }
+  if (isInferred || isFieldSuspicious(confidence)) {
+    return (
+      <span
+        title="Dato con baja confianza — revisar manualmente"
+        className="inline-block ml-1.5 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-amber-100"
+      />
+    );
+  }
+  return null;
+}
+
 export default function InvoiceDetailCard({ invoice }) {
   if (!invoice) return null;
 
   const json = invoice.documento_json || {};
   const nd = json.normalized_document || {};
+  const fieldConfidence = json.field_confidence || {};
+  const missingFields = json.missing_fields || [];
+  const inferredFields = json.inferred_fields || [];
 
   const rawConfidence = Number(invoice.confianza_ia ?? json.confianza);
   const confidenceValue = Number.isFinite(rawConfidence) && rawConfidence > 0 ? rawConfidence * 100 : null;
@@ -80,15 +116,41 @@ export default function InvoiceDetailCard({ invoice }) {
         </div>
       </div>
 
+      {(missingFields.length > 0 || inferredFields.length > 0) && (
+        <div className="px-5 py-2.5 bg-amber-50/50 flex flex-wrap items-center gap-4 text-xs text-slate-500">
+          {missingFields.length > 0 && (
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-400 ring-2 ring-red-100" />
+              Dato no detectado ({missingFields.length})
+            </span>
+          )}
+          {inferredFields.length > 0 && (
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-amber-100" />
+              Baja confianza — revisar ({inferredFields.length})
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="p-5">
         <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Informacion general</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
-          {fields.map((field) => (
-            <div key={field.label}>
-              <dt className="text-xs text-slate-400">{field.label}</dt>
-              <dd className="text-sm font-medium text-slate-700 mt-0.5">{field.value}</dd>
-            </div>
-          ))}
+          {fields.map((field) => {
+            const confKey = FIELD_CONFIDENCE_MAP[field.label];
+            const conf = confKey ? fieldConfidence[confKey] : null;
+            const isMissing = confKey ? missingFields.includes(confKey) : false;
+            const isInferred = confKey ? inferredFields.includes(confKey) : false;
+            return (
+              <div key={field.label}>
+                <dt className="text-xs text-slate-400 flex items-center">
+                  {field.label}
+                  {confKey && <FieldIndicator confidence={conf} isMissing={isMissing} isInferred={isInferred} />}
+                </dt>
+                <dd className={`text-sm font-medium mt-0.5 ${isMissing ? 'text-slate-400 italic' : 'text-slate-700'}`}>{field.value}</dd>
+              </div>
+            );
+          })}
         </div>
       </div>
 

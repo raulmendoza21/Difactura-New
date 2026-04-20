@@ -9,6 +9,7 @@ export function formatCurrency(amount) {
 export function formatDate(dateStr) {
   if (!dateStr) return '-';
   const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '-';
   return new Intl.DateTimeFormat('es-ES', {
     day: '2-digit',
     month: '2-digit',
@@ -19,6 +20,7 @@ export function formatDate(dateStr) {
 export function formatDateTime(dateStr) {
   if (!dateStr) return '-';
   const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '-';
   return new Intl.DateTimeFormat('es-ES', {
     day: '2-digit',
     month: '2-digit',

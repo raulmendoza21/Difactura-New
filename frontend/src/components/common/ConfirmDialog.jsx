@@ -39,7 +39,7 @@ export default function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={loading ? undefined : onCancel} />
       <div
         ref={dialogRef}
         role="alertdialog"

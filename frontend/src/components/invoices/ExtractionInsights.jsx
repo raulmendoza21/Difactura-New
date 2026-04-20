@@ -1,5 +1,6 @@
 import StatusPanel from '../common/StatusPanel';
 import { getTechnicalWarningMessages } from '../../utils/extractionWarnings';
+import { CONFIDENCE_THRESHOLDS_RATIO } from '../../utils/constants';
 
 const INPUT_KIND_LABELS = {
   pdf_digital: 'PDF digital',
@@ -99,7 +100,7 @@ export default function ExtractionInsights({ extraction }) {
   }
 
   const lowTechnicalFields = Object.entries(fieldConfidence)
-    .filter(([field, value]) => typeof value === 'number' && value < 0.7 && !optionalLowFields.has(field))
+    .filter(([field, value]) => typeof value === 'number' && value < CONFIDENCE_THRESHOLDS_RATIO.MEDIUM && !optionalLowFields.has(field))
     .map(([field]) => field.replaceAll('_', ' '))
     .slice(0, 5);
 
@@ -123,7 +124,7 @@ export default function ExtractionInsights({ extraction }) {
     });
   }
 
-  const tone = typeof confidence === 'number' && confidence < 0.8 ? 'warning' : 'info';
+  const tone = typeof confidence === 'number' && confidence < CONFIDENCE_THRESHOLDS_RATIO.HIGH ? 'warning' : 'info';
 
   return (
     <StatusPanel

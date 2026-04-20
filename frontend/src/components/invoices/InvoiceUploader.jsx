@@ -254,6 +254,16 @@ export default function InvoiceUploader({ company, onUploaded }) {
         />
       )}
 
+      {success && success.summary?.accepted > 0 && (
+        <StatusPanel
+          tone="success"
+          eyebrow="Lote registrado"
+          title={`${success.summary.accepted} documento${success.summary.accepted !== 1 ? 's' : ''} en cola de procesamiento`}
+          description={`Los documentos de ${company?.nombre || 'la empresa'} se han registrado correctamente y estan siendo analizados por el motor de IA. Puedes seguir su estado en la bandeja documental.`}
+          compact
+        />
+      )}
+
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

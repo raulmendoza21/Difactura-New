@@ -109,14 +109,14 @@ export default function UploadInvoice() {
         onUploaded={(result) => {
           if (isEmpresaUser) {
             // Empresa users always go to invoice list
-            setTimeout(() => navigate('/invoices'), 1200);
+            setTimeout(() => navigate('/invoices'), 3000);
           } else if (result?.summary?.accepted === 1) {
             const firstAccepted = result.documents?.find((document) => document.status === 'queued');
             if (firstAccepted?.factura?.id) {
-              setTimeout(() => navigate(`/invoices/review/${firstAccepted.factura.id}`), 1200);
+              setTimeout(() => navigate(`/invoices/review/${firstAccepted.factura.id}`), 3000);
             }
           } else if (result?.summary?.accepted > 1) {
-            setTimeout(() => navigate('/invoices'), 1200);
+            setTimeout(() => navigate('/invoices'), 3000);
           }
         }}
       />

@@ -22,7 +22,102 @@ ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".webp"}
 
 _settings = Settings()
 
-CONFIDENCE = 0.95  # vision models are highly accurate on clear documents
+# ── Confidence scoring weights ──────────────────────────────────────────────
+# Fields and their weights for the global confidence calculation.
+# Critical fields weigh more; optional fields weigh less.
+_FIELD_WEIGHTS = {
+    "numero_factura": 1.5,
+    "fecha": 1.5,
+    "proveedor": 1.2,
+    "cif_proveedor": 1.3,
+    "cliente": 0.8,
+    "cif_cliente": 0.8,
+    "base_imponible": 1.5,
+    "iva": 1.0,
+    "iva_porcentaje": 0.7,
+    "total": 1.8,
+    "lineas": 1.0,
+}
+
+
+def _compute_field_confidence(data: dict, lineas: list, vision_result: dict) -> dict[str, float]:
+    """Compute realistic per-field confidence based on presence, coherence, and inference."""
+    fc: dict[str, float] = {}
+
+    # Base: 0.92 if field present and looks reasonable, 0.0 if absent
+    fc["numero_factura"] = 0.92 if data.get("numero_factura") else 0.0
+    fc["fecha"] = 0.92 if data.get("fecha_emision") else 0.0
+    fc["proveedor"] = 0.92 if data.get("emisor_nombre") else 0.0
+    fc["cif_proveedor"] = _nif_confidence(data.get("emisor_nif"))
+    fc["cliente"] = 0.92 if data.get("receptor_nombre") else 0.0
+    fc["cif_cliente"] = _nif_confidence(data.get("receptor_nif"))
+    fc["base_imponible"] = 0.92 if data.get("base_imponible") is not None else 0.0
+    fc["iva_porcentaje"] = 0.90 if data.get("iva_porcentaje") is not None else 0.0
+    fc["iva"] = 0.92 if data.get("iva_cuota") is not None else 0.0
+    fc["total"] = 0.92 if data.get("total_factura") is not None else 0.0
+    fc["lineas"] = 0.90 if data.get("lineas") else 0.0
+
+    # ── Coherence checks: penalize if arithmetic doesn't add up ──
+    base = _to_float(data.get("base_imponible"))
+    iva = _to_float(data.get("iva_cuota"))
+    total = _to_float(data.get("total_factura"))
+    retencion = _to_float(data.get("retencion_importe"))
+    recargo = _to_float(data.get("recargo_importe"))
+
+    if total > 0:
+        expected = base + iva + recargo - retencion
+        diff = abs(expected - total)
+        if diff > 0.10:
+            # Totals don't match — reduce confidence on amounts
+            penalty = min(0.30, diff / total) if total > 0 else 0.15
+            fc["total"] = max(0.50, fc["total"] - penalty)
+            fc["base_imponible"] = max(0.50, fc["base_imponible"] - penalty * 0.7)
+            fc["iva"] = max(0.50, fc["iva"] - penalty * 0.7)
+
+    # Line items coherence
+    if lineas and base > 0:
+        line_sum = sum(_to_float(ln.get("importe_total")) for ln in (data.get("lineas") or []))
+        line_diff = abs(line_sum - base)
+        if line_diff > max(base * 0.05, 2.0):
+            fc["lineas"] = max(0.55, fc["lineas"] - 0.20)
+
+    # If retries were needed (indicated by higher token usage), slightly reduce confidence
+    usage = vision_result.get("usage", {})
+    prompt_tokens = usage.get("prompt_tokens", 0) if isinstance(usage, dict) else 0
+    if prompt_tokens > 8000:  # indicates retry calls happened
+        for key in fc:
+            if fc[key] > 0:
+                fc[key] = max(0.50, fc[key] - 0.05)
+
+    return fc
+
+
+def _nif_confidence(nif_value) -> float:
+    """Score NIF/CIF field: higher if format looks valid."""
+    if not nif_value:
+        return 0.0
+    clean = re.sub(r"[\s\-]", "", str(nif_value)).upper()
+    # Spanish NIF/CIF pattern: letter + 7 digits + letter/digit OR 8 digits + letter
+    if re.match(r"^[A-Z]\d{7}[A-Z0-9]$", clean) or re.match(r"^\d{8}[A-Z]$", clean):
+        return 0.94
+    return 0.70  # present but unusual format
+
+
+def _compute_global_confidence(field_confidence: dict[str, float]) -> float:
+    """Weighted average of per-field confidences. Returns 0-1 ratio."""
+    total_weight = 0.0
+    weighted_sum = 0.0
+    for field, weight in _FIELD_WEIGHTS.items():
+        value = field_confidence.get(field, 0.0)
+        # Only count fields that could have a value (don't penalize optional absent fields)
+        if value > 0 or field in ("numero_factura", "fecha", "total", "base_imponible"):
+            weighted_sum += value * weight
+            total_weight += weight
+    if total_weight == 0:
+        return 0.0
+    raw = weighted_sum / total_weight
+    # Clamp to a realistic range — never output > 0.97 or exact round numbers
+    return round(min(0.97, raw), 4)
 
 
 def _clean_tax_id(value: str) -> str:
@@ -100,21 +195,6 @@ def _build_v2_response(vision_result: dict, company_tax_id: str, company_name: s
     data = vision_result["data"]
     operation_side = _determine_operation_side(data, company_tax_id, company_name)
 
-    # Per-field confidence — all high since vision model read them directly
-    field_confidence: dict[str, float] = {
-        "numero_factura": CONFIDENCE if data.get("numero_factura") else 0.0,
-        "fecha": CONFIDENCE if data.get("fecha_emision") else 0.0,
-        "proveedor": CONFIDENCE if data.get("emisor_nombre") else 0.0,
-        "cif_proveedor": CONFIDENCE if data.get("emisor_nif") else 0.0,
-        "cliente": CONFIDENCE if data.get("receptor_nombre") else 0.0,
-        "cif_cliente": CONFIDENCE if data.get("receptor_nif") else 0.0,
-        "base_imponible": CONFIDENCE if data.get("base_imponible") is not None else 0.0,
-        "iva_porcentaje": CONFIDENCE if data.get("iva_porcentaje") is not None else 0.0,
-        "iva": CONFIDENCE if data.get("iva_cuota") is not None else 0.0,
-        "total": CONFIDENCE if data.get("total_factura") is not None else 0.0,
-        "lineas": CONFIDENCE if data.get("lineas") else 0.0,
-    }
-
     # Line items — map vision schema → v2 schema
     lineas = [
         {
@@ -125,6 +205,19 @@ def _build_v2_response(vision_result: dict, company_tax_id: str, company_name: s
         }
         for ln in (data.get("lineas") or [])
     ]
+
+    # Per-field confidence — realistic scoring based on presence, format, and coherence
+    field_confidence = _compute_field_confidence(data, lineas, vision_result)
+    global_confidence = _compute_global_confidence(field_confidence)
+
+    # Detect inferred/missing fields for frontend indicators
+    inferred_fields: list[str] = []
+    missing_fields: list[str] = []
+    for field_name, conf in field_confidence.items():
+        if conf == 0.0:
+            missing_fields.append(field_name)
+        elif conf < 0.80:
+            inferred_fields.append(field_name)
 
     # Tax breakdown → v2 format
     desglose = data.get("desglose_impuestos") or []
@@ -169,11 +262,14 @@ def _build_v2_response(vision_result: dict, company_tax_id: str, company_name: s
         "document_meta": {
             "extraction_provider": vision_result.get("model", "openai_vision"),
             "extraction_method": "vision",
-            "extraction_confidence": CONFIDENCE,
+            "extraction_confidence": global_confidence,
             "pages": vision_result.get("pages", 1),
             "elapsed_seconds": vision_result.get("elapsed_seconds"),
             "usage": vision_result.get("usage"),
-            "warnings": [],
+            "warnings": (
+                [f"missing:{f}" for f in missing_fields]
+                + [f"inferred:{f}" for f in inferred_fields]
+            ),
         },
         "classification": {
             "document_type": tipo,
@@ -247,15 +343,20 @@ def _build_v2_response(vision_result: dict, company_tax_id: str, company_name: s
         "tax_regime": data.get("regimen_fiscal") or "",
         "operation_side": operation_side,
         "document_type": tipo,
-        "confianza": CONFIDENCE,
+        "confianza": global_confidence,
         "lineas": lineas,
         # ── extra meta ──────────────────────────────────────────────────────
         "field_confidence": field_confidence,
+        "inferred_fields": inferred_fields,
+        "missing_fields": missing_fields,
         "normalized_document": normalized_document,
         "method": "vision",
         "provider": vision_result.get("model", "openai_vision"),
         "pages": vision_result.get("pages", 1),
-        "warnings": [],
+        "warnings": (
+            [f"missing:{f}" for f in missing_fields]
+            + [f"inferred:{f}" for f in inferred_fields]
+        ),
     }
 
 

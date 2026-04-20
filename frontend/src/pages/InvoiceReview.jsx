@@ -538,7 +538,7 @@ export default function InvoiceReview() {
         confirmLabel="Validar"
         tone="success"
         loading={actionLoading === 'validate'}
-        onConfirm={() => { handleValidate(); setConfirmAction(null); }}
+        onConfirm={async () => { await handleValidate(); setConfirmAction(null); }}
         onCancel={() => setConfirmAction(null)}
       />
 
@@ -549,7 +549,7 @@ export default function InvoiceReview() {
         confirmLabel="Reprocesar"
         tone="danger"
         loading={actionLoading === 'reprocess'}
-        onConfirm={() => { handleReprocess(); setConfirmAction(null); }}
+        onConfirm={async () => { await handleReprocess(); setConfirmAction(null); }}
         onCancel={() => setConfirmAction(null)}
       />
     </div>

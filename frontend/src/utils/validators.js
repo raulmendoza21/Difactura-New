@@ -1,3 +1,5 @@
+import { ALLOWED_FILE_TYPES, MAX_FILE_SIZE } from './constants';
+
 export function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -50,10 +52,9 @@ export function isPositiveNumber(value) {
 }
 
 export function isValidFileType(file) {
-  const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff'];
-  return allowed.includes(file.type);
+  return ALLOWED_FILE_TYPES.includes(file.type);
 }
 
-export function isValidFileSize(file, maxBytes = 10 * 1024 * 1024) {
+export function isValidFileSize(file, maxBytes = MAX_FILE_SIZE) {
   return file.size <= maxBytes;
 }

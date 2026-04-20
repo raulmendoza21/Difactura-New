@@ -26,7 +26,7 @@ function getInvoiceConfidence(invoice) {
 }
 
 function canReprocess(invoice) {
-  return ![INVOICE_STATES.SUBIDA, INVOICE_STATES.EN_PROCESO, INVOICE_STATES.VALIDADA].includes(invoice.estado);
+  return ![INVOICE_STATES.SUBIDA, INVOICE_STATES.EN_PROCESO, INVOICE_STATES.VALIDADA, INVOICE_STATES.SINCRONIZADA].includes(invoice.estado);
 }
 
 function getChannelLabel(channel) {

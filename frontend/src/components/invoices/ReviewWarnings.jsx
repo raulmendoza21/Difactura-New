@@ -1,9 +1,10 @@
 import StatusPanel from '../common/StatusPanel';
 import { getNormalizedWarningGroups, hasWarningGroup } from '../../utils/extractionWarnings';
+import { isValidCif } from '../../utils/validators';
 
 function isValidTaxId(value) {
   if (!value) return false;
-  return /^[A-Z0-9][A-Z0-9-]{5,15}$/i.test(String(value).trim());
+  return isValidCif(value);
 }
 
 function toNumber(value) {
