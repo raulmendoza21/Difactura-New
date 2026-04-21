@@ -12,7 +12,9 @@ export const INVOICE_STATES = {
 export const INVOICE_STATE_LABELS = {
   SUBIDA: 'Subida',
   EN_PROCESO: 'En proceso',
-  PROCESADA_IA: 'Procesada automaticamente',
+  // PROCESADA_IA es legacy; ahora todo va a PENDIENTE_REVISION. Mantenemos
+  // la misma etiqueta y color para que datos antiguos se vean coherentes.
+  PROCESADA_IA: 'Pendiente de revision',
   PENDIENTE_REVISION: 'Pendiente de revision',
   VALIDADA: 'Validada',
   SINCRONIZADA: 'Sincronizada',
@@ -23,7 +25,7 @@ export const INVOICE_STATE_LABELS = {
 export const INVOICE_STATE_COLORS = {
   SUBIDA: 'bg-slate-100 text-slate-700',
   EN_PROCESO: 'bg-blue-50 text-blue-700',
-  PROCESADA_IA: 'bg-indigo-50 text-indigo-700',
+  PROCESADA_IA: 'bg-amber-50 text-amber-700',
   PENDIENTE_REVISION: 'bg-amber-50 text-amber-700',
   VALIDADA: 'bg-emerald-50 text-emerald-700',
   SINCRONIZADA: 'bg-teal-50 text-teal-700',

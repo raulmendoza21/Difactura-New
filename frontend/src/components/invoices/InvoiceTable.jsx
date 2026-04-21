@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
-import { formatDate, formatDateTime, formatCurrency } from '../../utils/formatters';
+import { formatDate, formatDateTime, formatCurrency, getInvoiceCode } from '../../utils/formatters';
 import {
   INVOICE_STATE_LABELS,
   INVOICE_STATE_COLORS,
@@ -72,7 +72,7 @@ export default memo(function InvoiceTable({
         <table className="w-full text-sm">
           <thead>
             <tr className={`bg-slate-50/80 border-b border-slate-100 ${scrollable ? 'sticky top-0 z-10 backdrop-blur-sm' : ''}`}>
-              <th className="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Factura</th>
+              <th className="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Documento</th>
               <th className="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Contraparte / Empresa</th>
               <th className="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Cola</th>
               <th className="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wider">Tipo</th>
@@ -90,21 +90,22 @@ export default memo(function InvoiceTable({
                   <div className="space-y-1">
                     {isEmpresaUser ? (
                       <span className="font-semibold text-slate-800">
-                        {invoice.documento_json?.numero_factura || `#${invoice.id}`}
+                        {getInvoiceCode(invoice)}
                       </span>
                     ) : (
                       <Link to={`/invoices/review/${invoice.id}`} className="font-semibold text-blue-600 hover:text-blue-800">
-                        {invoice.documento_json?.numero_factura || `#${invoice.id}`}
+                        {getInvoiceCode(invoice)}
                       </Link>
                     )}
-                    <p className="text-xs text-slate-400">
-                      {invoice.documento?.nombre_archivo || `Documento #${invoice.id}`}
+                    <p className="text-xs text-slate-500">
+                      {invoice.documento_json?.numero_factura
+                        ? `Nº factura: ${invoice.documento_json.numero_factura}`
+                        : 'Sin nº de factura extraído'}
                     </p>
-                    {invoice.documento?.batch_id && (
-                      <p className="text-xs text-slate-400">
-                        Lote {invoice.documento.batch_id} · {getChannelLabel(invoice.documento.canal_entrada)}
-                      </p>
-                    )}
+                    <p className="text-xs text-slate-400 truncate max-w-[220px]">
+                      {invoice.documento?.nombre_archivo || 'Sin archivo asociado'}
+                      {invoice.documento?.canal_entrada ? ` · ${getChannelLabel(invoice.documento.canal_entrada)}` : ''}
+                    </p>
                   </div>
                 </td>
                 <td className="px-5 py-3.5 max-w-[240px]">
@@ -188,11 +189,14 @@ export default memo(function InvoiceTable({
             {isEmpresaUser ? (
               <div>
                 <div className="flex items-center justify-between mb-2 gap-3">
-                  <span className="font-semibold text-slate-800">{invoice.documento_json?.numero_factura || `#${invoice.id}`}</span>
+                  <span className="font-semibold text-slate-800">{getInvoiceCode(invoice)}</span>
                   <span className={`badge ${INVOICE_STATE_COLORS[invoice.estado] || 'bg-slate-100 text-slate-600'}`}>
                     {INVOICE_STATE_LABELS[invoice.estado] || invoice.estado}
                   </span>
                 </div>
+                {invoice.documento_json?.numero_factura && (
+                  <p className="text-xs text-slate-500 mb-1">Nº factura: {invoice.documento_json.numero_factura}</p>
+                )}
                 <p className="text-sm text-slate-600 truncate">{getCounterpartyName(invoice)}</p>
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-sm font-semibold text-slate-800">{formatCurrency(invoice.documento_json?.total)}</span>
@@ -217,20 +221,23 @@ export default memo(function InvoiceTable({
             <>
             <Link to={`/invoices/review/${invoice.id}`} className="block">
               <div className="flex items-center justify-between mb-2 gap-3">
-                <span className="font-semibold text-blue-600">{invoice.documento_json?.numero_factura || `#${invoice.id}`}</span>
+                <span className="font-semibold text-blue-600">{getInvoiceCode(invoice)}</span>
                 <span className={`badge ${INVOICE_STATE_COLORS[invoice.estado] || 'bg-slate-100 text-slate-600'}`}>
                   {INVOICE_STATE_LABELS[invoice.estado] || invoice.estado}
                 </span>
               </div>
+              {invoice.documento_json?.numero_factura && (
+                <p className="text-xs text-slate-500 mb-1">Nº factura: {invoice.documento_json.numero_factura}</p>
+              )}
               <p className="text-sm text-slate-600 truncate">{getCounterpartyName(invoice)}</p>
               <p className="mt-1 text-xs text-slate-400 truncate">
                 {getAssociatedCompanyName(invoice) !== '-'
                   ? `Empresa asociada: ${getAssociatedCompanyName(invoice)}`
                   : 'Sin empresa asociada'}
               </p>
-              {invoice.documento?.batch_id && (
+              {invoice.documento?.canal_entrada && (
                 <p className="mt-1 text-xs text-slate-400">
-                  {invoice.documento.batch_id} · {getChannelLabel(invoice.documento.canal_entrada)}
+                  {getChannelLabel(invoice.documento.canal_entrada)}
                 </p>
               )}
               <div className="flex items-center justify-between mt-2">

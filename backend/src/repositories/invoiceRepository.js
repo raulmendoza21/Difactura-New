@@ -114,15 +114,34 @@ async function findAll({
     params.push(batchId);
   }
   if (search) {
-    conditions.push(`(
-      COALESCE(f.documento_json->>'numero_factura', '') ILIKE $${paramIndex}
-      OR COALESCE(f.documento_json->>'proveedor', '') ILIKE $${paramIndex}
-      OR COALESCE(c.nombre, '') ILIKE $${paramIndex}
-      OR COALESCE(latest_document.nombre_archivo, '') ILIKE $${paramIndex}
-      OR COALESCE(latest_document.batch_id, '') ILIKE $${paramIndex}
-    )`);
-    params.push(`%${search}%`);
-    paramIndex += 1;
+    // Permitir buscar por nuestro identificador propio (DOC-000123) o numero suelto.
+    // Si el termino (sin prefijo) es un entero, lo intentamos casar contra:
+    //   * f.numero_correlativo cuando la consulta esta acotada a una empresa.
+    //   * f.id como fallback global (vista de asesoria).
+    const idMatch = String(search).trim().toUpperCase().replace(/^DOC-?/, '').replace(/^0+/, '');
+    const numericId = /^\d+$/.test(idMatch) ? parseInt(idMatch, 10) : null;
+
+    if (numericId !== null) {
+      conditions.push(`(
+        f.numero_correlativo = $${paramIndex + 1}
+        OR f.id = $${paramIndex + 1}
+        OR COALESCE(f.documento_json->>'numero_factura', '') ILIKE $${paramIndex}
+        OR COALESCE(f.documento_json->>'proveedor', '') ILIKE $${paramIndex}
+        OR COALESCE(c.nombre, '') ILIKE $${paramIndex}
+        OR COALESCE(latest_document.nombre_archivo, '') ILIKE $${paramIndex}
+      )`);
+      params.push(`%${search}%`, numericId);
+      paramIndex += 2;
+    } else {
+      conditions.push(`(
+        COALESCE(f.documento_json->>'numero_factura', '') ILIKE $${paramIndex}
+        OR COALESCE(f.documento_json->>'proveedor', '') ILIKE $${paramIndex}
+        OR COALESCE(c.nombre, '') ILIKE $${paramIndex}
+        OR COALESCE(latest_document.nombre_archivo, '') ILIKE $${paramIndex}
+      )`);
+      params.push(`%${search}%`);
+      paramIndex += 1;
+    }
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -174,13 +193,58 @@ async function findById(id) {
 }
 
 async function create(data) {
-  const result = await db.query(
-    `INSERT INTO facturas (estado, cliente_id, confianza_ia)
-     VALUES ($1, $2, $3)
-     RETURNING *`,
-    [data.estado || 'SUBIDA', data.cliente_id || null, data.confianza_ia || null]
-  );
-  return result.rows[0];
+  // El correlativo se asigna por empresa cliente: cada empresa ve sus facturas
+  // numeradas desde 1 sin huecos. Lo hacemos en transaccion para evitar
+  // condiciones de carrera entre uploads concurrentes del mismo cliente.
+  if (!data.cliente_id) {
+    // Sin cliente no hay correlativo: insercion simple (caso edge legacy).
+    const result = await db.query(
+      `INSERT INTO facturas (estado, cliente_id, confianza_ia)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [data.estado || 'SUBIDA', null, data.confianza_ia || null]
+    );
+    return result.rows[0];
+  }
+
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+
+    // UPSERT atomico: incrementa el contador del cliente y nos devuelve el
+    // nuevo valor. Sin race conditions porque la fila queda bloqueada por la
+    // propia tx hasta el COMMIT.
+    const seqResult = await client.query(
+      `INSERT INTO cliente_secuencias (cliente_id, ultimo_correlativo, updated_at)
+       VALUES ($1, 1, CURRENT_TIMESTAMP)
+       ON CONFLICT (cliente_id) DO UPDATE
+         SET ultimo_correlativo = cliente_secuencias.ultimo_correlativo + 1,
+             updated_at = CURRENT_TIMESTAMP
+       RETURNING ultimo_correlativo`,
+      [data.cliente_id]
+    );
+    const numeroCorrelativo = seqResult.rows[0].ultimo_correlativo;
+
+    const result = await client.query(
+      `INSERT INTO facturas (estado, cliente_id, confianza_ia, numero_correlativo)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [
+        data.estado || 'SUBIDA',
+        data.cliente_id,
+        data.confianza_ia || null,
+        numeroCorrelativo,
+      ]
+    );
+
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function update(id, data) {

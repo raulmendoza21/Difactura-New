@@ -16,10 +16,15 @@ async function getStats(req, res, next) {
     const validadas = estados.find((e) => e.estado === 'VALIDADA');
     const errores = estados.find((e) => e.estado === 'ERROR_PROCESAMIENTO');
 
+    // PROCESADA_IA es un estado legacy que ahora se cuenta dentro de PENDIENTE_REVISION
+    // (toda factura procesada espera validacion humana). Se suman para la UI y
+    // se mantiene el campo `procesadas_ia` por compatibilidad.
+    const pendientesCount = (pendientes ? pendientes.count : 0) + (procesadasIa ? procesadasIa.count : 0);
+
     res.json({
       total: totalFacturas,
       procesadas_ia: procesadasIa ? procesadasIa.count : 0,
-      pendientes_revision: pendientes ? pendientes.count : 0,
+      pendientes_revision: pendientesCount,
       validadas: validadas ? validadas.count : 0,
       errores: errores ? errores.count : 0,
       por_estado: estados,

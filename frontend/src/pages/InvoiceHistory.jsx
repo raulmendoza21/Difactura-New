@@ -15,7 +15,6 @@ const FILTERS = [
   { key: 'all', label: 'Todo', estado: undefined, accent: 'blue' },
   { key: INVOICE_STATES.SUBIDA, label: 'Subidas', estado: INVOICE_STATES.SUBIDA, accent: 'slate' },
   { key: INVOICE_STATES.EN_PROCESO, label: 'En proceso', estado: INVOICE_STATES.EN_PROCESO, accent: 'blue' },
-  { key: INVOICE_STATES.PROCESADA_IA, label: 'Procesadas IA', estado: INVOICE_STATES.PROCESADA_IA, accent: 'indigo' },
   { key: INVOICE_STATES.PENDIENTE_REVISION, label: 'Pendientes', estado: INVOICE_STATES.PENDIENTE_REVISION, accent: 'amber' },
   { key: INVOICE_STATES.ERROR_PROCESAMIENTO, label: 'Con error', estado: INVOICE_STATES.ERROR_PROCESAMIENTO, accent: 'red' },
   { key: INVOICE_STATES.VALIDADA, label: 'Validadas', estado: INVOICE_STATES.VALIDADA, accent: 'emerald' },
@@ -42,7 +41,6 @@ const SORT_OPTIONS = [
 const DEFAULT_OPERATIONAL_FILTERS = {
   company_id: '',
   channel: '',
-  batch_id: '',
   search: '',
   sort_by: 'created_at',
   sort_dir: 'desc',
@@ -188,9 +186,6 @@ export default function InvoiceHistory() {
         }`
       );
     }
-    if (operationalFilters.batch_id.trim()) {
-      items.push(`Lote: ${operationalFilters.batch_id.trim()}`);
-    }
     if (operationalFilters.search.trim()) {
       items.push(`Busqueda: ${operationalFilters.search.trim()}`);
     }
@@ -201,7 +196,6 @@ export default function InvoiceHistory() {
   const hasManualOperationalFilters =
     (!selectedCompany && Boolean(operationalFilters.company_id)) ||
     Boolean(operationalFilters.channel) ||
-    Boolean(operationalFilters.batch_id.trim()) ||
     Boolean(operationalFilters.search.trim()) ||
     operationalFilters.sort_by !== DEFAULT_OPERATIONAL_FILTERS.sort_by ||
     operationalFilters.sort_dir !== DEFAULT_OPERATIONAL_FILTERS.sort_dir;
@@ -225,7 +219,6 @@ export default function InvoiceHistory() {
     updateParams({
       company_id: operationalFilters.company_id || undefined,
       channel: operationalFilters.channel || undefined,
-      batch_id: operationalFilters.batch_id.trim() || undefined,
       search: operationalFilters.search.trim() || undefined,
       sort_by: operationalFilters.sort_by,
       sort_dir: operationalFilters.sort_dir,
@@ -248,7 +241,6 @@ export default function InvoiceHistory() {
       estado: undefined,
       company_id: nextCompanyId || undefined,
       channel: undefined,
-      batch_id: undefined,
       search: undefined,
       sort_by: DEFAULT_OPERATIONAL_FILTERS.sort_by,
       sort_dir: DEFAULT_OPERATIONAL_FILTERS.sort_dir,
@@ -443,7 +435,7 @@ export default function InvoiceHistory() {
                   </span>
                   <input
                     className="input-field"
-                    placeholder="Numero, contraparte, empresa asociada, archivo..."
+                    placeholder="DOC-000123, número de factura, contraparte, archivo..."
                     value={operationalFilters.search}
                     onChange={(event) => handleOperationalFilterChange('search', event.target.value)}
                   />
@@ -483,18 +475,6 @@ export default function InvoiceHistory() {
                       </option>
                     ))}
                   </select>
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Lote
-                  </span>
-                  <input
-                    className="input-field"
-                    placeholder="upl_2026..."
-                    value={operationalFilters.batch_id}
-                    onChange={(event) => handleOperationalFilterChange('batch_id', event.target.value)}
-                  />
                 </label>
 
                 <label className="space-y-1">

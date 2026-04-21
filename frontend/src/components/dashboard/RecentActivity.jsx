@@ -67,7 +67,7 @@ export default memo(function RecentActivity({ activities = [], loading = false }
         <span className="text-xs font-medium text-slate-400">{activities.length} eventos</span>
       </div>
 
-      <div className="space-y-3">
+      <div className="max-h-[420px] overflow-y-auto pr-2 space-y-3 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
         {activities.map((activity) => (
           <div
             key={activity.id}

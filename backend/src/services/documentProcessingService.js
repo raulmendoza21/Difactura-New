@@ -32,9 +32,10 @@ async function processJob(job) {
     });
 
     const confianza = Number(engineResult.confianza) || 0;
-    const nuevoEstado = confianza > 0
-      ? INVOICE_STATES.PROCESADA_IA
-      : INVOICE_STATES.PENDIENTE_REVISION;
+    // Unificado: toda factura procesada por la IA queda en PENDIENTE_REVISION
+    // a la espera de validacion humana. La confianza queda guardada para que
+    // la UI pueda destacar las que necesitan mas atencion.
+    const nuevoEstado = INVOICE_STATES.PENDIENTE_REVISION;
 
     // Guardar el JSON completo extraído por el motor
     await invoiceRepo.update(factura.id, {

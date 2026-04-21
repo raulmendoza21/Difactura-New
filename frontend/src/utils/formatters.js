@@ -40,3 +40,19 @@ export function truncateText(text, maxLength = 40) {
   if (!text) return '-';
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
+
+// Identificador propio que mostramos al usuario para cada documento.
+// Se deriva del correlativo por empresa cliente cuando esta disponible
+// (numeracion limpia por empresa: DOC-000001, DOC-000002...). Si aun no
+// existe (facturas creadas antes de la migracion 007), cae al id global
+// como fallback para no romper la UI.
+export function formatDocumentCode(value) {
+  if (value == null || value === '') return 'DOC-?????';
+  return `DOC-${String(value).padStart(6, '0')}`;
+}
+
+// Helper conveniente: recibe el objeto factura y elige el mejor identificador.
+export function getInvoiceCode(invoice) {
+  if (!invoice) return 'DOC-?????';
+  return formatDocumentCode(invoice.numero_correlativo ?? invoice.id);
+}

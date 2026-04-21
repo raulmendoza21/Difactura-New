@@ -5,7 +5,7 @@ Aplicacion web para subir facturas en PDF o imagen, extraer sus datos automatica
 ## Que hace
 
 - Sube facturas PDF o imagen desde la interfaz web (drag & drop o selector).
-- Extrae datos estructurados con el motor visual (OpenAI Vision gpt-4.1-mini).
+- Extrae datos estructurados con el motor visual (OpenAI Vision, gpt-5.4-mini).
 - Muestra un panel de revision con todos los campos extraidos: emisor, receptor, importes, lineas de detalle.
 - Permite editar y corregir campos antes de validar.
 - Soporta IVA (peninsula) e IGIC (Canarias) incluyendo facturas con tipos impositivos mixtos.
@@ -18,24 +18,36 @@ Aplicacion web para subir facturas en PDF o imagen, extraer sus datos automatica
 |------|-----------|
 | Frontend | React 18 + Vite 6 + Tailwind CSS |
 | Backend | Node.js 20 + Express |
-| Motor visual (activo) | FastAPI + OpenAI Vision (gpt-4.1-mini) |
-| Motor heuristico (alternativo) | FastAPI + Mistral OCR + reglas + resolvedor |
+| Motor visual | FastAPI + OpenAI Vision (gpt-4.1-mini) |
 | Base de datos | PostgreSQL 15 |
+| Proxy de produccion | Nginx |
 | Orquestacion | Docker Compose |
+
+> El directorio `FAKEai-service-v2/` contiene un motor heuristico alternativo en estado experimental. **No forma parte del despliegue de produccion** y no debe levantarse en el entorno productivo.
 
 ## Arquitectura
 
 ```
-frontend/            Interfaz React — revision y gestion de facturas
+frontend/            Interfaz React - revision y gestion de facturas
 backend/             API REST, negocio y persistencia (Node.js/Express)
-ai-service-vision/   Motor de extraccion IA Vision — activo en produccion (puerto 8001)
-ai-service-v2/       Motor documental heuristico — alternativa sin LLM (puerto 8000)
+ai-service-vision/   Motor de extraccion IA Vision (puerto 8001)
+FAKEai-service-v2/   Motor heuristico experimental - NO se despliega
 database/            Esquema SQL y datos de prueba
 docs/                Documentacion del proyecto
-nginx/               Proxy inverso (solo perfil production)
-storage/             Documentos subidos en runtime — no es codigo fuente
-models/              Cache de modelos locales — no se sube a Git
+nginx/               Proxy inverso (perfil production)
+storage/             Documentos originales subidos en runtime - no es codigo fuente
 ```
+
+Flujo real de un documento:
+
+1. El usuario sube un PDF o imagen desde el frontend.
+2. El backend persiste el original en `storage/uploads/<uuid>.<ext>` y crea un job en PostgreSQL.
+3. Un worker interno reclama el job (`FOR UPDATE SKIP LOCKED`) y lo envia a `ai-service-vision`.
+4. El motor convierte el PDF a imagenes **en memoria**, llama a OpenAI Vision y devuelve el JSON estructurado.
+5. El backend guarda el JSON en `facturas.documento_json` y deja la factura en revision.
+6. El usuario revisa, corrige y valida o rechaza.
+
+Las imagenes intermedias generadas por el motor IA **no se persisten**: se reconstruyen bajo demanda. El unico artefacto que vive fuera de PostgreSQL es el archivo original.
 
 ## Variables de entorno
 
@@ -80,16 +92,17 @@ docker compose down
 | Frontend | http://localhost:5173 |
 | Backend API | http://localhost:3000/api/health |
 | Motor visual | http://localhost:8001/health |
-| Motor heuristico | http://localhost:8000/health |
 | Base de datos | localhost:5432 |
 
 ## Produccion
 
-```bash
-docker compose --profile production up -d --build
-```
+El `docker-compose.yml` que vive en la raiz esta orientado a **desarrollo** (bind mounts, `nodemon`, Vite dev server). No debe usarse tal cual en un servidor productivo.
 
-Levanta nginx como proxy inverso ademas del resto de servicios.
+El despliegue de produccion (Hetzner, dos nodos, HTTPS, backups, storage en volume persistente) esta documentado paso a paso en:
+
+- [docs/produccion-hetzner.md](./docs/produccion-hetzner.md)
+
+Ese documento contiene la auditoria del sistema, los bloqueantes a resolver antes del go-live, la estrategia de almacenamiento de documentos (Fase 1 volume Hetzner, Fase 2 object storage), las variables de entorno, el plan por fases y el runbook de puesta en marcha.
 
 ## Regimenes fiscales soportados
 
@@ -99,25 +112,14 @@ Levanta nginx como proxy inverso ademas del resto de servicios.
 
 El motor detecta el regimen automaticamente segun el emisor, los tipos impositivos encontrados y las palabras clave del documento.
 
-## Modelo de datos
-
-| Tabla | Contenido |
-|-------|-----------|
-| `asesorias` | Asesorias fiscales (multi-tenant) |
-| `usuarios` | Usuarios con roles: ADMIN, CONTABILIDAD, REVISOR, LECTURA |
-| `clientes` | Empresas cliente de cada asesoria |
-| `proveedores` | Emisores de facturas recibidas |
-| `facturas` | Cabecera de cada factura (numero, fecha, importes, desglose de impuestos) |
-| `factura_lineas` | Lineas de detalle (descripcion, cantidad, precio unitario, subtotal) |
-| `documentos` | Fichero fisico y JSON completo de la extraccion |
-| `auditoria` | Registro de cambios y validaciones |
 
 ## Estructura del proyecto
 
 ```
-codigo vivo:     frontend/  backend/  ai-service-vision/  ai-service-v2/  database/
+codigo vivo:     frontend/  backend/  ai-service-vision/  database/
 documentacion:   docs/
-runtime local:   storage/  models/
+runtime local:   storage/
+experimental:    FAKEai-service-v2/  (no se despliega)
 ```
 
 ## Credenciales de demo
@@ -135,14 +137,5 @@ El seed incluye usuarios de prueba. Consulta `database/schema/003_seed_data.sql`
 
 ## Documentacion
 
-- [Documento maestro del motor](./docs/motor-documental-desacoplado.md)
-- [Contrato de datos documentales y contables](./docs/contrato-datos-documentales-y-contables.md)
-- [API endpoints](./docs/api-endpoints.md)
-- [Despliegue](./docs/deployment.md)
+- [Plan de produccion en Hetzner](./docs/produccion-hetzner.md) - auditoria, estrategia de almacenamiento, fases y runbook de despliegue.
 
-## Notas
-
-- `samples/`, `storage/` y la cache de modelos no forman parte del repositorio.
-- `artifacts/invoice-result-snapshots/` se usa solo para comparativas locales y snapshots temporales.
-- El proyecto esta preparado para trabajar sin APIs de pago si usas `Ollama`.
-- La primera factura puede tardar mas si el modelo local estaba en frio.

@@ -73,6 +73,16 @@ export default function Dashboard() {
 
   const statsByState = useMemo(() => buildStatsMap(stats?.por_estado), [stats]);
 
+  const processedTotal = useMemo(() => {
+    if (!stats) return 0;
+    // pendientes_revision ya incluye PROCESADA_IA (legacy) en backend.
+    return (
+      (stats.pendientes_revision || 0) +
+      (stats.validadas || 0) +
+      (stats.errores || 0)
+    );
+  }, [stats]);
+
   if (loading) {
     return <LoadingSpinner text="Cargando centro operativo..." />;
   }
@@ -140,12 +150,12 @@ export default function Dashboard() {
           subtitle={
             selectedCompanyDetails
               ? 'Pendientes de la empresa activa'
-              : 'Documentos listos para revision'
+              : 'Documentos esperando validacion humana'
           }
           color="amber"
           icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
           infoTitle="Pendientes"
-          infoDescription="Documentos ya procesados que esperan revision antes de confirmarse."
+          infoDescription="Documentos ya procesados por la IA que esperan la validacion de una persona."
           infoItems={[
             'Son el bloque principal de trabajo para la asesoria.',
             'No quedan validados hasta que alguien revise y confirme la factura.',
@@ -279,7 +289,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <Charts statsByState={statsByState} />
+        <Charts statsByState={statsByState} processedTotal={processedTotal} />
         <RecentActivity activities={stats?.actividad_reciente || []} loading={statsLoading} />
       </div>
     </div>

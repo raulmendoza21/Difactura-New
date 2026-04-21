@@ -19,6 +19,7 @@ services:
       - ./database/schema/004_json_persistence.sql:/docker-entrypoint-initdb.d/05-json-persistence.sql
       - ./database/schema/005_empresa_users.sql:/docker-entrypoint-initdb.d/06-empresa-users.sql
       - ./database/schema/006_seed_empresa_user.sql:/docker-entrypoint-initdb.d/07-seed-empresa.sql
+      - ./database/schema/007_factura_correlativo.sql:/docker-entrypoint-initdb.d/08-factura-correlativo.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -110,7 +111,6 @@ services:
     profiles:
       - production
 
-  # Motor visual nuevo — OpenAI Vision, sin GPU, sin OCR local
   ai-service-vision:
     build:
       context: ./ai-service-vision
