@@ -1,565 +1,422 @@
-# Difactura: auditoria tecnica y plan de produccion en Hetzner
+# Difactura: plan de produccion en Hetzner (v2 — replanteado desde cero)
 
-## 1. Resumen ejecutivo
+## 1. Resumen de la auditoria (lo que ya esta bien y lo que no)
 
-Este documento resume la auditoria del sistema que hoy esta activo en el repositorio y propone una forma realista de ponerlo en produccion sobre Hetzner.
+### 1.1 Lo que ya esta bien
+- Pipeline de imagen (`ai-service-vision`): PDF -> PNG 300 DPI en RAM con PyMuPDF; fotos con auto-rotacion EXIF, upscale ×2 si ancho < 1200 px, downscale a 2048 px (OpenAI Vision con `detail=high` ya reescala a ~1024 px), nitidez ×1.35 y contraste ×1.15. **Esto ya entrega a OpenAI la mejor calidad util posible. No hay que tocar nada.**
+- Cola en PostgreSQL con `FOR UPDATE SKIP LOCKED`: lista para escalar a varios workers cuando haga falta.
+- Multi-tenant por asesoria/cliente, roles, auditoria, JSON extraido en `facturas.documento_json`.
+- Recuperacion de jobs caidos (`PROCESSING_JOB_RECOVERY_INTERVAL_MS`).
 
-Conclusion corta:
+### 1.2 Lo que esta mal
 
-- Si, Hetzner es una buena opcion para la primera produccion de Difactura.
-- No recomiendo desplegar el estado actual del repo "tal cual".
-- La arquitectura minima seria de 2 servidores: uno de aplicacion y otro de base de datos.
-- `FAKEai-service-v2` queda fuera de alcance y no debe desplegarse.
+- `nginx/Dockerfile` y `nginx/nginx.conf` vacios -> los elimino, no hace falta nginx.
+- `storage/processed/` creado en `server.js` y nunca escrito -> codigo muerto, fuera.
+- `documentos.ruta_storage` guarda ruta absoluta del host -> resolver siempre por `STORAGE_BACKEND + storage_key`.
+- CORS abierto en backend y en `ai-service-vision`.
+- Sin rate limiting en login ni upload.
+- Sin TLS configurado.
+- `FAKEai-service-v2/` no entra en produccion.
 
-El motivo por el que Hetzner encaja aqui es simple: el trabajo pesado de IA no lo hace la infraestructura propia, sino OpenAI. Eso baja mucho la necesidad de GPU y hace viable una arquitectura de Docker Compose bien cerrada, con buen coste y una operacion razonable.
+### 1.3 La pregunta clave que planteaste sobre las imagenes
 
----
+> "a la IA se la tengo que pasar con la mejor calidad posible pero a la hora de guardarlas no se que hacer exactamente"
 
-## 2. Alcance de la auditoria
+**Respuesta corta y firme:**
 
-Servicios realmente activos revisados:
+- A la IA ya se le pasa la mejor calidad util (300 DPI desde PDF, original con EXIF corregido y enhancements suaves desde foto). Esto vive en RAM, **no se guarda**.
+- Lo unico que hay que guardar es el **archivo original tal cual lo subio el usuario** (PDF, JPG, PNG, TIFF, WEBP). Sirve para:
+  - Cumplir conservacion legal: 4 anos LGT art. 29 / 6 anos Codigo de Comercio art. 30.
+  - Re-visualizar el documento durante la revision manual.
+  - Reprocesar si se cambia el modelo de IA o el prompt.
+- **No se guardan imagenes intermedias.** Son trivialmente reconstruibles desde el original, ocupan mas, y no aportan valor legal ni funcional. Si en el futuro hace falta miniatura, eso es un cache local con TTL, no almacen permanente.
 
-- `frontend/`: React 18 + Vite
-- `backend/`: Node.js 20 + Express
-- `ai-service-vision/`: FastAPI + OpenAI Vision
-- `database/`: PostgreSQL 15
-- `nginx/`: previsto para produccion, pero hoy incompleto
-- `docker-compose.yml`: orquestacion actual
-
-Servicio explicitamente descartado para produccion:
-
-- `FAKEai-service-v2/`
-
----
-
-## 3. Arquitectura real actual
-
-### 3.1 Componentes
-
-| Componente | Estado actual | Funcion |
-|---|---|---|
-| Frontend | Activo | SPA para login, subida, revision y listado |
-| Backend | Activo | API REST, autenticacion, persistencia, cola y worker |
-| AI Vision | Activo | Convierte PDF a imagenes y llama a OpenAI Vision |
-| PostgreSQL | Activo | Persistencia de facturas, documentos, usuarios, auditoria y jobs |
-| Nginx | Incompleto | Perfil de produccion declarado pero no operativo |
-
-### 3.2 Flujo funcional real
-
-1. El usuario entra al frontend y se autentica contra `POST /api/auth/login`.
-2. El frontend guarda el JWT en `localStorage` y usa `/api` como base URL.
-3. La subida de archivos entra por `POST /api/invoices/upload`.
-4. El backend guarda el fichero en `storage/uploads`.
-5. El backend crea una factura, un documento y un job en `processing_jobs`.
-6. El worker interno del backend reclama jobs pendientes desde PostgreSQL.
-7. El backend llama a `ai-service-vision` por HTTP interno.
-8. `ai-service-vision` transforma el PDF en imagenes y llama a OpenAI.
-9. El resultado vuelve al backend, que lo guarda en `facturas.documento_json`.
-10. El usuario revisa, valida o rechaza la factura.
-
-### 3.3 Caracteristicas importantes que ya existen
-
-- Multi-tenant por asesoria y cliente.
-- Roles y control de acceso.
-- Cola de procesamiento basada en BD.
-- Bloqueo concurrente de jobs con `FOR UPDATE SKIP LOCKED`.
-- Auditoria de acciones.
-- Persistencia del JSON extraido en PostgreSQL.
+Con esto la decision de almacenamiento se reduce a: "donde pongo los originales". Y la respuesta es **Hetzner Object Storage (S3) desde el dia 1** (justificacion en seccion 4).
 
 ---
 
-## 4. Hallazgos de auditoria
+## 2. Arquitectura propuesta
 
-### 4.1 Bloqueantes para produccion
-
-Estos puntos impiden considerar el stack actual como una produccion real.
-
-| Area | Hallazgo | Impacto |
-|---|---|---|
-| Proxy | `nginx/nginx.conf` esta vacio | No hay reverse proxy real |
-| Proxy | `nginx/Dockerfile` esta vacio | El perfil `production` no queda montado |
-| Frontend | `docker-compose.yml` usa `frontend/Dockerfile.dev` incluso para produccion | En prod levantaria Vite dev server |
-| Backend | `backend/Dockerfile` esta orientado a desarrollo y arranca con `nodemon` | Mala practica y sobrecarga en prod |
-| Backend | La imagen no copia el codigo fuente; depende del bind mount | Imagen no inmutable |
-| AI service | `docker-compose.yml` monta `./ai-service-vision/app:/app/app` | Sigue siendo despliegue de desarrollo |
-| Compose | El perfil actual de produccion no separa dev/prod | Riesgo operativo alto |
-
-### 4.2 Riesgos altos
-
-| Area | Hallazgo | Impacto |
-|---|---|---|
-| Seguridad | `cors()` abierto en backend | Cualquier origen puede llamar a la API |
-| Seguridad | CORS abierto tambien en `ai-service-vision` | Superficie innecesaria |
-| Seguridad | No hay rate limiting en login ni upload | Riesgo de abuso y fuerza bruta |
-| Seguridad | No hay TLS definido en el repo | No hay HTTPS operativo |
-| Datos | `storage/uploads/` vive en filesystem local sin redundancia | Una rotura del disco implica perdida del documento original |
-| Datos | `documentos.ruta_storage` guarda la ruta absoluta del host en BD | Frapil ante cambios de mount o migracion entre nodos |
-| Datos | `storage/processed/` se crea pero nadie escribe en el (codigo muerto) | Confusion operativa, no representa nada |
-| Datos | No hay backups definidos para PostgreSQL ni para `storage/` | Riesgo de perdida de datos |
-| Observabilidad | Logs basicos con `morgan` y `console.*` | Trazabilidad limitada |
-| Salud | `/api/health` solo comprueba BD | No detecta caida del servicio IA ni del storage |
-
-### 4.3 Riesgos medios
-
-| Area | Hallazgo | Impacto |
-|---|---|---|
-| Escalado | El worker va embebido en el backend | Escalado API y jobs acoplado |
-| Pool BD | No hay tuning de conexiones en `pg.Pool` | Riesgo bajo carga |
-| Sesion web | JWT en `localStorage` | Aumenta sensibilidad ante XSS |
-| Storage | No hay politica de retencion ni archivado | Crecimiento indefinido |
-| Operacion | No hay separacion clara de entornos | Facil cometer errores de despliegue |
-
-### 4.4 Matices importantes
-
-- La cola actual si esta preparada para multiples workers a nivel SQL, porque reclama jobs con `FOR UPDATE SKIP LOCKED`.
-- Aun asi, hoy el worker y la API comparten proceso y ciclo de vida, asi que yo no escalaria horizontalmente sin separar primero el modo de operacion.
-- En el workspace existe un `.env` local en raiz y esta correctamente ignorado por Git. Aun asi, no debe reutilizarse sin limpieza para produccion.
-
----
-
-## 5. Decision sobre Hetzner
-
-### 5.1 Cuando si lo recomiendo
-
-Hetzner me parece buena opcion si el objetivo es:
-
-- lanzar una primera produccion seria con coste contenido;
-- mantener el stack en Docker;
-- operar en Europa;
-- asumir una gestion propia de backups, secretos y despliegues;
-- empezar con carga baja o media.
-
-Para este caso encaja bien porque:
-
-- el frontend es ligero;
-- el backend es sencillo;
-- PostgreSQL no necesita aun una topologia compleja;
-- el servicio IA no hace OCR pesado local ni inferencia propia, solo preprocesa y delega en OpenAI.
-
-### 5.2 Cuando no lo recomendaria como destino final
-
-No lo usaria como arquitectura final si en poco tiempo vas a necesitar:
-
-- alta disponibilidad fuerte en varias zonas;
-- servicios gestionados de base de datos, secretos y colas;
-- compliance fuerte o controles operativos muy auditados;
-- escalar rapidamente a muchos clientes con poco equipo de operaciones.
-
-### 5.3 Mi recomendacion realista
-
-Mi recomendacion es:
-
-- usar Hetzner para la primera produccion;
-- no hacer all-in-one en una sola maquina salvo demo o preproduccion;
-- arrancar con 2 servidores y backups externos;
-- dejar preparada una fase 2 para separar worker y storage documental.
-
----
-
-## 6. Arquitectura objetivo en Hetzner
-
-### 6.1 Topologia recomendada
+### 2.1 Topologia
 
 ```mermaid
 flowchart LR
     U[Usuario] --> DNS[DNS dominio]
     DNS --> FW[Hetzner Firewall]
-    FW --> APP[app-01\nnginx + frontend + backend + ai-service-vision]
-    APP --> DB[(db-01\nPostgreSQL)]
-    APP --> ST[/Volume uploads/]
-    DB --> BK[Backups externos\nStorage Box o S3 compatible]
-    ST --> BK
+    FW --> APP[app-01 — Caddy + frontend estatico + backend Node + ai-service-vision]
+    APP --> DB[(db-01 — PostgreSQL nativo)]
+    APP --> S3[(Hetzner Object Storage — originales)]
     APP --> OAI[OpenAI API]
+    DB --> S3B[(S3 bucket backups — pg_dump)]
 ```
 
-### 6.2 Servidores
+### 2.2 Nodos
 
-### Opcion recomendada para arrancar
+| Nodo | Tamano | Exposicion | Que corre | Como corre |
+|---|---|---|---|---|
+| `app-01` | CX32 (4 vCPU / 8 GB / 80 GB) | Publico (80/443) | Caddy + frontend (build estatico) + backend Node 20 + ai-service-vision (Python 3.11) | systemd nativo |
+| `db-01` | CX22 (2 vCPU / 4 GB) + Volume 40 GB | Privado | PostgreSQL 15 | systemd / paquete `postgresql-15` de Debian/Ubuntu |
+| Hetzner Object Storage | bucket `difactura-prod-uploads` | API S3 privada | Originales subidos | Servicio gestionado |
+| Hetzner Object Storage | bucket `difactura-prod-backups` | API S3 privada | `pg_dump` cifrados | Servicio gestionado |
 
-| Nodo | Tamano recomendado | Exposicion | Que corre |
-|---|---|---|---|
-| `app-01` | 4 vCPU / 8 GB RAM / 80-160 GB disco | Publico | `nginx`, `frontend`, `backend`, `ai-service-vision` |
-| `db-01` | 4 vCPU / 8-16 GB RAM / volume dedicado | Privado | `postgres`, tareas de backup |
+Coste aproximado al go-live: ~25-35 EUR/mes (2 VPS + volume + ~20 GB de object storage + ancho de banda).
 
-### Opcion minima no recomendada salvo piloto
+### 2.3 Por que sin Docker en `app-01`
 
-| Nodo | Tamano recomendado | Exposicion | Que corre |
-|---|---|---|---|
-| `all-in-one-01` | 4 vCPU / 8 GB RAM / 160 GB | Publico | Todo |
+Originalmente Docker entro en el repo "porque si". Auditando lo que tienes:
 
-Esta opcion funciona para un piloto, pero no es la que recomiendo para datos fiscales reales.
+- Son 3 procesos (Caddy, Node, Python) en un solo nodo.
+- No hay multi-tenant a nivel de proceso.
+- No hay despliegue blue/green.
+- No hay otra plantilla de servidor.
 
-### 6.3 Red y puertos
+Para ese tamano, Docker anade complejidad (Dockerfiles multi-stage, builds, registry, networks, volumes, healthchecks YAML) que **no se rentabiliza**. systemd te da:
 
-Expuestos a Internet:
+- arranque/reinicio automatico,
+- logs por journald (`journalctl -u difactura-backend -f`),
+- limites de recursos (`MemoryMax=`, `CPUQuota=`),
+- aislamiento basico (`ProtectSystem=strict`, `PrivateTmp=true`, `NoNewPrivileges=true`),
+- sin daemon extra.
 
-- `80/tcp` solo para redireccion a HTTPS o challenge ACME
-- `443/tcp` para la aplicacion
-- `22/tcp` solo por IP de administracion o VPN
+Si en el futuro Difactura crece a varios nodos de app o varios entornos, migrar a Docker (o Kubernetes ligero como k3s) es trivial: el codigo no cambia, solo el empaquetado.
 
-Solo en red privada Hetzner:
+> **Alternativa Docker**: si por preferencia personal quieres mantener Docker en `app-01`, ver Anexo A. La eleccion de Caddy y de Object Storage no cambia.
 
-- `3000/tcp` backend
-- `8001/tcp` ai-service-vision
-- `5432/tcp` PostgreSQL
+### 2.4 Por que Caddy y no nginx
 
-No debe exponerse PostgreSQL publicamente.
+- Caddy obtiene y renueva certificados Let's Encrypt **automaticamente**. Sin certbot, sin cron, sin renovaciones rotas.
+- Configuracion en ~10 lineas (Caddyfile) en vez de un `nginx.conf` con `server { ... }`, `ssl_certificate`, `ssl_certificate_key`, `proxy_pass`, headers, etc.
+- HTTP/2 y HTTP/3 por defecto.
+- Hoy mismo te resuelve los dos ficheros vacios (`nginx/Dockerfile`, `nginx/nginx.conf`) sin escribirlos.
 
-### 6.4 Persistencia
+`nginx` sigue siendo perfectamente valido si lo prefieres por familiaridad o porque tu equipo lo conoce. Pero para 1 dominio + 1 backend HTTP + assets estaticos, Caddy es objetivamente menos trabajo.
 
-Separaria la persistencia en dos capas:
+### 2.5 Por que Object Storage (S3) desde el dia 1
 
-1. PostgreSQL en `db-01` con volume dedicado.
-2. Documentos originales en un volume persistente montado en `app-01` (ver seccion 6.5 para el detalle).
+| Criterio | Volume Hetzner + backup a Storage Box | Hetzner Object Storage (S3) desde el dia 1 |
+|---|---|---|
+| Durabilidad | La del disco; necesitas backup explicito | 11 nueves declarados, replicado por el proveedor |
+| Backup de originales | Cron de `restic` o `rsync`, hay que monitorizar y restaurar a mano | Implicito (versioning + lifecycle rules) |
+| Multi-nodo | No: el volume va atado a un VPS | Si por defecto |
+| Disaster recovery del nodo | Reattach del volume, restaurar permisos, parar/arrancar servicios | El nodo nuevo ya ve los mismos objetos |
+| Crecimiento >200 GB | Hay que migrar a S3 (la "Fase 2" del plan anterior) | Ya estas ahi |
+| Coste 50 GB | ~5 EUR (volume) + ~3 EUR (Storage Box) | ~3-5 EUR/mes (Hetzner Object Storage) |
+| Cambios de codigo | Pequeno (resolver por `STORAGE_PATH + storage_key`) | Pequeno (cliente S3 + URLs firmadas para descargar) |
+| Operacion | Tu mantienes el backup y la restauracion | El proveedor mantiene la durabilidad |
 
----
+El "ahorro" del Volume desaparece en cuanto sumas Storage Box y el tiempo de mantener los scripts. Y te ata a un nodo. **Saltar a S3 desde el dia 1 elimina la fase de migracion futura.**
 
-## 6.5 Estrategia de almacenamiento de documentos
-
-Esta es la decision mas importante del despliegue. La justifico despues de revisar lo que el sistema realmente hace con los archivos.
-
-### 6.5.1 Que se guarda hoy (verificado en codigo)
-
-Despues de auditar el flujo real:
-
-- `backend/src/middleware/fileUpload.js` usa `multer.diskStorage` y persiste el **archivo original** (PDF, JPG, PNG, TIFF, WEBP) en `storage/uploads/` con un nombre UUID.
-- `backend/src/services/invoiceService.js` guarda en BD `storage_key` (UUID con extension) y `ruta_storage` (ruta absoluta del host).
-- `backend/src/controllers/invoiceController.js` sirve el documento de vuelta con `res.sendFile(document.ruta_storage)` cuando el usuario quiere ver el original o reprocesarlo.
-- `ai-service-vision/app/routes.py` recibe el binario en multipart, lo escribe en `tempfile.mkdtemp()`, llama a `pdf_to_images.file_to_images` y a continuacion `shutil.rmtree(tmp_dir)`.
-- `ai-service-vision/app/pdf_to_images.py` convierte cada pagina PDF a PNG **en memoria** con PyMuPDF + PIL, devuelve la lista en base64 y la envia a OpenAI Vision. Nunca toca disco.
-- `storage/processed/` se crea en el arranque del backend pero **ningun servicio escribe ahi**. Es codigo muerto.
-- El JSON con los datos extraidos vive en PostgreSQL en `facturas.documento_json` (ver `004_json_persistence.sql`). No es un fichero.
-
-### 6.5.2 Conclusion para produccion
-
-El unico artefacto realmente persistente que necesita almacenamiento fuera de PostgreSQL es **el documento original que subio el usuario**. Las imagenes intermedias generadas por el motor IA son **efimeras y reconstruibles** en cualquier momento a partir del original, sin coste extra (la conversion ya ocurre en RAM).
-
-Esto simplifica enormemente la decision: no hay que disenar una estrategia para imagenes derivadas porque no existen.
-
-### 6.5.3 Por que conservar los originales
-
-No es opcional. La normativa espanola obliga a conservar los justificantes de facturas:
-
-- Articulo 29 LGT: 4 anos de prescripcion fiscal.
-- Codigo de Comercio art. 30: 6 anos para libros, correspondencia y justificantes.
-- En la practica, los despachos suelen guardar 6 anos como minimo.
-
-Ademas, el frontend permite re-visualizar el documento original durante la revision, asi que el archivo tiene que estar accesible online en caliente.
-
-### 6.5.4 Opciones evaluadas
-
-| Opcion | Coste | Operacion | Cambios de codigo | Apto multi-nodo | Veredicto |
-|---|---|---|---|---|---|
-| A. Volume Hetzner en `app-01` (filesystem) | Muy bajo | Simple | Pequeno (resolver por `storage_key`) | No | **Recomendada para Fase 1** |
-| B. Hetzner Storage Box montado por SMB/SSHFS | Bajo | Media (mounts fragiles) | Cero | Limitado | Solo como destino de backup, no como storage caliente |
-| C. Object storage S3 compatible (Hetzner Object Storage, Cloudflare R2, Backblaze B2) | Bajo | Media | Medio (cliente S3, URLs firmadas) | Si | **Recomendada para Fase 2** |
-| D. Guardar el binario en PostgreSQL como `bytea` | Medio | Simple | Medio | Si | Descartada: infla la BD y los backups, perjudica rendimiento |
-
-### 6.5.5 Decision
-
-**Fase 1 (go-live):** Volume persistente Hetzner montado en `app-01` como `/data/difactura/storage`, con `STORAGE_PATH=/data/difactura/storage` en el contenedor backend. Backup diario via `rsync` o `restic` a un Hetzner Storage Box.
-
-**Fase 2 (cuando haya >1 nodo de app o el volumen supere ~200 GB):** mover a Hetzner Object Storage (S3 compatible). El abstracto `storage_key` ya esta en BD, basta con cambiar el adaptador.
-
-**En ambas fases:**
-
-- Eliminar `storage/processed/` del repo y del codigo de arranque (es ruido).
-- Refactor menor: en `getDocumentFile`, resolver la ruta como `path.join(STORAGE_PATH, 'uploads', storage_key)` en vez de confiar en `ruta_storage` absoluta. La columna `ruta_storage` queda como legado y se puede dejar de escribir.
-- Politica de retencion: 6 anos minimo. A partir del ano 2 los documentos pueden moverse a una clase de almacenamiento mas barata (cold) por job nocturno. No borrar por defecto.
-- Cuotas: limitar tamano por archivo (`MAX_FILE_SIZE`) y vigilar el uso de disco con alerta a partir del 70%.
-
-### 6.5.6 Sobre las imagenes intermedias
-
-Mantenerlas en memoria como hace hoy el codigo es lo correcto. No tiene sentido persistirlas porque:
-
-- son trivialmente reconstruibles desde el PDF;
-- ocupan mas que el PDF original;
-- no aportan valor legal ni de negocio;
-- si en algun momento se quiere cachearlas (por ejemplo para mostrar miniaturas), el sitio adecuado es un cache local con TTL en `app-01`, nunca el almacen permanente.
+Las facturas tienen un patron de acceso ideal para object storage: write-once, read varias veces los primeros dias, casi nunca despues de validadas, retencion 6 anos. Lifecycle rules de S3 las pueden mover automaticamente a clase fria a partir del ano 2.
 
 ---
 
-## 7. Como deberia quedar el stack de produccion
+## 3. Como queda el flujo en produccion
 
-### 7.1 Separacion de compose
+1. Usuario entra a `https://app.tudominio.com` (Caddy en `app-01`).
+2. Caddy sirve el frontend estatico (`/var/www/difactura/`) y proxya `/api/*` al backend en `localhost:3000`.
+3. Backend autentica y, en `POST /api/invoices/upload`, en lugar de `multer.diskStorage` usa el adaptador S3:
+   - genera `storage_key = uuid().ext`,
+   - sube el binario a `s3://difactura-prod-uploads/{empresa_id}/{storage_key}` (server-side encryption activado),
+   - guarda en BD `documentos.storage_key` y opcionalmente el bucket. La columna `ruta_storage` queda como legado y se deja de escribir.
+4. Backend crea factura + documento + job (igual que hoy).
+5. Worker reclama el job, descarga el original de S3 a un `tempfile` local (o stream en memoria), llama a `ai-service-vision` por HTTP en `localhost:8001`.
+6. `ai-service-vision` convierte a imagenes en RAM y llama a OpenAI (sin cambios).
+7. Backend escribe el JSON en `facturas.documento_json` (sin cambios).
+8. Cuando el usuario quiere ver el original, el backend devuelve una **URL firmada de S3 con TTL corto** (5 min). El navegador descarga directo del bucket.
 
-No reutilizaria el `docker-compose.yml` actual como compose de produccion.
+Ningun fichero vive en disco local de forma persistente. `app-01` se vuelve **stateless**, lo que abarata enormemente la operacion (snapshots, recreacion, escalado).
 
-Haria esta separacion:
+---
 
-```text
-/opt/difactura/
-  app/
-    docker-compose.app.yml
-    .env.production
-    nginx/
-  db/
-    docker-compose.db.yml
-    .env.production
-    backups/
+## 4. Estrategia de almacenamiento (definitiva)
+
+### 4.1 Que se guarda y donde
+
+| Artefacto | Donde | Por que |
+|---|---|---|
+| Original subido por el usuario (PDF/JPG/PNG/TIFF/WEBP) | Hetzner Object Storage, bucket `difactura-prod-uploads`, key `{empresa_id}/{uuid}.ext`, SSE activado | Conservacion legal 6 anos + reprocesar |
+| Imagenes intermedias 300 DPI PNG | RAM en `ai-service-vision` durante la llamada | No aportan valor legal y son reconstruibles |
+| JSON extraido | PostgreSQL `facturas.documento_json` | Ya esta asi, funciona |
+| `pg_dump` cifrados | Hetzner Object Storage, bucket `difactura-prod-backups` | Disaster recovery |
+| Logs de aplicacion | journald de cada nodo + opcional envio a un Loki/Grafana hospedado | Observabilidad |
+
+### 4.2 Lifecycle rules en S3
+
+- `difactura-prod-uploads`: mover a clase fria (`HOT -> COOL`) a los 730 dias. Nunca borrar (politica de retencion).
+- `difactura-prod-backups`: 30 backups diarios, despues 12 mensuales, despues 6 anuales. Borrar el resto.
+
+### 4.3 Cuotas y limites
+
+- `MAX_FILE_SIZE` en backend: 10 MB por archivo (suficiente para facturas, evita abuso).
+- Alerta en el bucket cuando supere el 70% del presupuesto mensual previsto.
+
+### 4.4 Cambios de codigo necesarios (minimos)
+
+1. Crear `backend/src/services/storage/` con dos adaptadores: `LocalStorage` (para dev) y `S3Storage` (para prod), elegidos por `STORAGE_BACKEND=local|s3` en `.env`.
+2. Reemplazar `multer.diskStorage` por `multer.memoryStorage` + `storage.put(key, buffer)` en el controller de upload.
+3. Reemplazar `res.sendFile(document.ruta_storage)` por `res.redirect(storage.signedUrl(storage_key, 300))`.
+4. Borrar `storage/processed/` del repo y la creacion del directorio en `server.js`.
+5. Adaptar `ai-service-vision`: en vez de recibir el binario por multipart desde el backend, puede recibir directamente la URL firmada y descargarla. Opcional, simplifica el backend.
+
+Estos cambios son ~150-200 lineas y dejan el sistema multi-nodo desde el dia 1.
+
+---
+
+## 5. Configuracion de los nodos
+
+### 5.1 `db-01` — PostgreSQL nativo
+
+```bash
+# Ubuntu 24.04 LTS
+apt install postgresql-15 postgresql-contrib
+# Volume Hetzner formateado ext4, montado en /var/lib/postgresql/15/main (con noatime)
+systemctl enable --now postgresql
+# pg_hba.conf: solo IP privada de app-01 puede conectarse, metodo scram-sha-256
+# postgresql.conf: listen_addresses = '<ip-privada-db>', max_connections=100, shared_buffers=2GB
 ```
 
-### 7.2 Compose del nodo de aplicacion
+Backups:
 
-Servicios del nodo `app-01`:
+```bash
+# /etc/cron.daily/difactura-pg-backup
+pg_dump -Fc difactura | gpg --encrypt --recipient backup-key | \
+  s3cmd put - s3://difactura-prod-backups/$(date +%Y/%m/%d)/difactura.dump.gpg
+```
 
-- `nginx`
-- `frontend`
-- `backend`
-- `ai-service-vision`
+### 5.2 `app-01` — Caddy + Node + Python con systemd
 
-Condiciones:
+Caddyfile (`/etc/caddy/Caddyfile`):
 
-- sin bind mounts de codigo;
-- sin `nodemon`;
-- sin `vite` en modo dev;
-- puertos internos solo en la red Docker local;
-- `nginx` como unico punto de entrada publico.
+```caddyfile
+app.tudominio.com {
+    encode zstd gzip
+    root * /var/www/difactura
+    file_server
+    handle_path /api/* {
+        reverse_proxy localhost:3000
+    }
+}
+```
 
-### 7.3 Compose del nodo de base de datos
+Servicios systemd (resumen, `/etc/systemd/system/`):
 
-Servicios del nodo `db-01`:
+```ini
+# difactura-backend.service
+[Service]
+User=difactura
+WorkingDirectory=/opt/difactura/backend
+EnvironmentFile=/etc/difactura/backend.env
+ExecStart=/usr/bin/node src/server.js
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+MemoryMax=1G
+```
 
-- `postgres`
-- `pg-backup` o tarea cron/systemd equivalente
+```ini
+# difactura-ai-vision.service
+[Service]
+User=difactura
+WorkingDirectory=/opt/difactura/ai-service-vision
+EnvironmentFile=/etc/difactura/ai-vision.env
+ExecStart=/opt/difactura/ai-service-vision/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+MemoryMax=2G
+```
 
-Condiciones:
+Despliegue:
 
-- volume dedicado a datos;
-- acceso solo por red privada;
-- backups periodicos fuera del nodo.
+```bash
+# en el dev box
+npm --prefix backend ci --omit=dev
+npm --prefix frontend ci && npm --prefix frontend run build
+# en app-01
+rsync backend/ -> /opt/difactura/backend/
+rsync frontend/dist/ -> /var/www/difactura/
+rsync ai-service-vision/ -> /opt/difactura/ai-service-vision/
+systemctl restart difactura-backend difactura-ai-vision caddy
+```
 
-### 7.4 Resultado operativo esperado
-
-El despliegue quedaria conceptualmente asi:
-
-- `https://app.tudominio.com` entra por `nginx`.
-- `nginx` sirve frontend y proxya `/api` al backend.
-- el backend llama a `ai-service-vision` por red interna.
-- `ai-service-vision` llama a OpenAI.
-- el backend guarda metadatos y estado en PostgreSQL privado.
-- los archivos viven en el volume de `app-01` y se replican por backup.
-
----
-
-## 8. Cambios minimos obligatorios antes del go-live
-
-### 8.1 Cambios de infraestructura y despliegue
-
-1. Crear `docker-compose.app.yml` y `docker-compose.db.yml` de produccion.
-2. Completar `nginx/Dockerfile` y `nginx/nginx.conf`.
-3. Crear una imagen de backend autocontenida (sin `nodemon`, copiar `src/`).
-4. Usar `frontend/Dockerfile` de build, no `frontend/Dockerfile.dev`.
-5. Eliminar bind mounts de codigo en produccion (frontend, backend, ai-service-vision).
-6. Ejecutar todo con `NODE_ENV=production`.
-7. Montar el volume Hetzner en `app-01` como `/data/difactura/storage` y exponerlo al backend en `/app/storage`.
-8. Eliminar `storage/processed/` del repo y la creacion de ese directorio en `backend/src/server.js`.
-
-### 8.2 Cambios de seguridad
-
-1. Restringir CORS del backend al dominio real del frontend.
-2. Restringir o eliminar CORS en `ai-service-vision`.
-3. Anadir rate limiting en login y upload.
-4. Configurar HTTPS con Let's Encrypt.
-5. Guardar secretos en `.env.production` fuera del repo y con permisos de root.
-6. No exponer puertos internos en host salvo `80/443`.
-
-### 8.3 Cambios de operacion
-
-1. Anadir backup de PostgreSQL diario (`pg_dump`) y al menos un dump adicional intradia, replicado a Hetzner Storage Box.
-2. Anadir backup de `/data/difactura/storage/uploads` a Storage Box con `restic` o `rsync` (incremental, cifrado).
-3. Activar rotacion de logs Docker (`max-size`, `max-file`).
-4. Mejorar healthcheck del backend para incluir BD, AI service y verificacion de escritura en `STORAGE_PATH`.
-5. Definir alertas basicas: caida de servicios, uso de disco >70%, fallos de backup, jobs en `ERROR_PROCESAMIENTO`.
-6. Refactor menor: servir documentos resolviendo `STORAGE_PATH + storage_key` en vez de `ruta_storage` absoluta.
+Un script `scripts/deploy.sh` lo automatiza.
 
 ---
 
-## 9. Variables de entorno de produccion
+## 6. Variables de entorno
 
-Separaria las variables en dos archivos: uno para `app-01` y otro para `db-01`.
-
-### 9.1 `app-01/.env.production`
+### 6.1 `app-01:/etc/difactura/backend.env`
 
 ```env
 NODE_ENV=production
 PORT=3000
 
-JWT_SECRET=CAMBIAR_POR_SECRETO_LARGO_Y_ALEATORIO
+JWT_SECRET=CAMBIAR
 JWT_EXPIRES_IN=8h
 BCRYPT_SALT_ROUNDS=12
 
-DATABASE_URL=postgresql://usuario:password@IP_PRIVADA_DB:5432/difactura
+DATABASE_URL=postgresql://difactura_user:CAMBIAR@<ip-privada-db>:5432/difactura
 
-AI_SERVICE_URL=http://ai-service-vision:8001
+AI_SERVICE_URL=http://127.0.0.1:8001
 AI_SERVICE_TIMEOUT_MS=300000
-AI_SERVICE_RETRIES=1
 
-OPENAI_API_KEY=CAMBIAR
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4.1-mini
-OPENAI_TIMEOUT_SECONDS=120
-
-# Volume Hetzner montado en /data/difactura/storage en el host
-# y expuesto al contenedor backend bajo /app/storage o /data/difactura/storage
-STORAGE_PATH=/data/difactura/storage
+STORAGE_BACKEND=s3
+S3_ENDPOINT=https://fsn1.your-objectstorage.com
+S3_REGION=fsn1
+S3_BUCKET=difactura-prod-uploads
+S3_ACCESS_KEY=CAMBIAR
+S3_SECRET_KEY=CAMBIAR
+S3_PRESIGNED_TTL=300
 MAX_FILE_SIZE=10485760
-STORAGE_DISK_USAGE_ALERT_PCT=70
 
 PROCESSING_POLL_INTERVAL_MS=3000
 PROCESSING_JOB_STALE_MS=900000
 PROCESSING_JOB_RECOVERY_INTERVAL_MS=30000
 PROCESSING_JOB_MAX_RECOVERIES=2
 
-APP_DOMAIN=app.tudominio.com
 FRONTEND_ORIGIN=https://app.tudominio.com
 ```
 
-### 9.2 `db-01/.env.production`
+### 6.2 `app-01:/etc/difactura/ai-vision.env`
 
 ```env
-POSTGRES_USER=difactura_user
-POSTGRES_PASSWORD=CAMBIAR
-POSTGRES_DB=difactura
+OPENAI_API_KEY=CAMBIAR
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_TIMEOUT_SECONDS=120
+MAX_FILE_SIZE_MB=50
+MAX_PAGES=8
+IMAGE_DPI=300
 ```
 
----
-
-## 10. Plan de despliegue por fases
-
-### 10.1 Fase 0: endurecer el repo
-
-Objetivo: dejar el proyecto listo para construir imagenes de verdad.
-
-Tareas:
-
-- completar `nginx/Dockerfile` y `nginx/nginx.conf`;
-- separar compose dev/prod (`docker-compose.app.yml`, `docker-compose.db.yml`);
-- corregir Dockerfiles de backend (sin `nodemon`, copia `src/`) y frontend (build estatico servido por nginx);
-- quitar bind mounts en prod en los tres servicios;
-- eliminar `storage/processed/` y dejar de crearlo en `server.js`;
-- refactor minimo de `getDocumentFile` para resolver por `STORAGE_PATH + storage_key`;
-- preparar `.env.production.example`.
-
-### 10.2 Fase 1: primera produccion estable en Hetzner
-
-Objetivo: tener una produccion segura y operable sin sobredisenar.
-
-Topologia:
-
-- `app-01` (4 vCPU / 8 GB) con volume Hetzner para `/data/difactura/storage`;
-- `db-01` (4 vCPU / 8-16 GB) con volume dedicado para `pgdata`;
-- Hetzner Storage Box como destino de backups (Postgres + storage);
-- Hetzner Cloud Firewall delante de ambos nodos;
-- DNS apuntando a `app-01`, certificados Let's Encrypt en nginx.
-
-Con esto ya tienes:
-
-- separacion entre app y datos;
-- HTTPS;
-- base de datos no publica;
-- persistencia real de los originales en volume;
-- backups cifrados off-host;
-- coste contenido.
-
-### 10.3 Fase 2: escalado moderado
-
-Cuando se cumpla cualquiera de estos disparadores:
-
-- el volumen de `storage/uploads/` supere ~200 GB;
-- haga falta un segundo nodo de aplicacion;
-- los tiempos de cola en hora punta se vuelvan visibles para el usuario;
-- el numero de asesorias o empresas crezca de forma sostenida.
-
-Actuaciones:
-
-- separar el worker del backend web (mismo binario, comando distinto);
-- mover documentos a Hetzner Object Storage (S3) reutilizando `storage_key`;
-- anadir observabilidad seria (Prometheus + Grafana o equivalente alojado);
-- valorar un balanceador y dos nodos de aplicacion;
-- politica de archivado en frio para documentos con mas de 24 meses.
+Permisos: `chmod 640 /etc/difactura/*.env`, `chown root:difactura /etc/difactura/*.env`.
 
 ---
 
-## 11. Runbook de puesta en produccion
+## 7. Seguridad
 
-### 11.1 Provisionar Hetzner
+1. SSH solo por clave, root sin password, fail2ban activo en `app-01` y `db-01`.
+2. Hetzner Cloud Firewall: `app-01` expone 22 (solo IPs admin), 80, 443; `db-01` expone 22 (admin) y 5432 solo a la IP privada de `app-01`.
+3. CORS del backend cerrado a `https://app.tudominio.com`.
+4. CORS de `ai-service-vision` deshabilitado (escucha en 127.0.0.1, no necesita CORS).
+5. Rate limiting en backend con `express-rate-limit`:
+   - login: 5 intentos / 15 min por IP,
+   - upload: 30 archivos / hora por usuario.
+6. Headers de seguridad via Caddy (`Strict-Transport-Security`, `X-Content-Type-Options`, `Referrer-Policy`, `Content-Security-Policy` minima).
+7. Secretos: `.env` con permisos 640, owner `root:difactura`. Considerar `systemd-creds` o sops si crece el equipo.
+8. JWT en `localStorage` se mantiene por simplicidad, pero si el frontend se reescribe, migrar a cookie `HttpOnly; Secure; SameSite=Lax` con CSRF token.
 
-1. Crear una red privada para la aplicacion.
-2. Crear `app-01` y `db-01` dentro de esa red.
-3. Adjuntar volume persistente a `db-01`.
-4. Opcionalmente adjuntar otro volume a `app-01` para `storage/`.
-5. Configurar firewall cloud.
+---
 
-### 11.2 Endurecer hosts
+## 8. Salud y observabilidad
 
-1. SSH solo por clave.
-2. Desactivar login por password.
-3. Actualizaciones automaticas de seguridad.
-4. Zona horaria, NTP y logs basicos.
-5. Docker con rotacion de logs.
+- `/api/health` ampliado: comprobar BD + AI service + escritura/listado en bucket S3.
+- Logs por journald, exportables a Loki/Grafana cloud o un syslog gestionado si se quiere historial largo.
+- Metricas minimas: jobs en `ERROR_PROCESAMIENTO`, latencia P95 del upload, latencia P95 de la llamada a OpenAI, % uso CPU/RAM por servicio. Cualquier UptimeRobot / BetterStack basico vale para alertar caidas y certificados.
 
-### 11.3 Preparar base de datos
+---
 
-1. Levantar `postgres` en `db-01`.
-2. Restaurar esquema inicial.
-3. Verificar acceso solo desde IP privada de `app-01`.
-4. Programar backups.
+## 9. Plan de despliegue por fases
 
-### 11.4 Preparar aplicacion
+### Fase 0 — Endurecer el repo (antes de tocar Hetzner)
 
-1. Copiar repo o artefactos de despliegue a `app-01`.
-2. Crear `.env.production` fuera de Git con permisos 600 y owner root.
-3. Adjuntar el volume Hetzner a `app-01` y montarlo en `/data/difactura/storage` (formateado ext4, mount con `noatime`).
-4. Crear las subcarpetas `uploads/` con owner del UID del proceso del contenedor backend.
-5. Levantar `nginx`, `frontend`, `backend` y `ai-service-vision`.
-6. Configurar certificados TLS Let's Encrypt en nginx (HTTP-01 sobre puerto 80).
-7. Apuntar DNS al nodo publico.
-8. Programar el job de backup de `storage/uploads/` a Storage Box.
+- [ ] Borrar `nginx/`.
+- [ ] Borrar `storage/processed/` del repo y de `backend/src/server.js`.
+- [ ] Implementar `backend/src/services/storage/` con `LocalStorage` y `S3Storage`.
+- [ ] Cambiar upload a `multer.memoryStorage` + `storage.put`.
+- [ ] Cambiar `getDocumentFile` a `res.redirect(signedUrl(...))`.
+- [ ] Anadir rate limiting y cerrar CORS.
+- [ ] Generar `frontend/dist` con `npm run build` (sin Vite dev en prod).
+- [ ] Probar todo en local con `STORAGE_BACKEND=local`.
+- [ ] Probar en local con un MinIO contra `STORAGE_BACKEND=s3`.
 
-### 11.5 Validacion de salida
+### Fase 1 — Primera produccion en Hetzner
 
-Checklist minima:
+- [ ] Crear red privada Hetzner.
+- [ ] Provisionar `db-01` (CX22 + volume 40 GB) e instalar PostgreSQL 15.
+- [ ] Provisionar `app-01` (CX32) con Ubuntu 24.04, Node 20, Python 3.11, Caddy.
+- [ ] Crear los dos buckets en Hetzner Object Storage y generar access keys con permisos minimos.
+- [ ] Configurar firewall cloud.
+- [ ] Desplegar codigo via rsync + systemd.
+- [ ] Apuntar DNS a `app-01`. Caddy emite el certificado automaticamente.
+- [ ] Programar `pg_dump` cifrado a S3.
+- [ ] Validacion (seccion 10).
 
-- login correcto;
-- `/api/health` responde y comprueba BD + AI service + escritura en `STORAGE_PATH`;
-- subida de factura correcta (PDF, JPG y PNG);
-- job pasa por `SUBIDA -> EN_PROCESO -> PROCESADA_IA`;
-- visualizacion del documento original almacenado;
-- validacion manual de factura;
-- reinicio de los contenedores: el documento sigue accesible tras `docker compose down/up`;
-- prueba de backup de Postgres y de `storage/uploads/`;
-- prueba de restauracion en un host limpio (ensayo con un par de facturas).
+### Fase 2 — Cuando aparezcan disparadores
+
+Disparadores reales (no por adelantado):
+
+- >50 facturas/min sostenidas o jobs visiblemente en cola.
+- Necesidad de zero-downtime deploys.
+- Mas de un nodo de app.
+
+Acciones:
+
+- Separar el worker del backend web (mismo binario, comando distinto: `node src/worker.js`). El SQL ya esta listo (`FOR UPDATE SKIP LOCKED`).
+- Anadir un segundo `app-02` y un balanceador (Hetzner LB).
+- Empaquetar en imagenes Docker si se va a multi-nodo (es cuando Docker empieza a rentar).
+
+---
+
+## 10. Validacion de salida (checklist)
+
+- [ ] `https://app.tudominio.com` carga, certificado valido, HTTP/2.
+- [ ] Login funciona; rate limit corta a los 5 intentos.
+- [ ] `GET /api/health` responde y comprueba BD + AI service + S3.
+- [ ] Subir un PDF: el objeto aparece en `s3://difactura-prod-uploads/{empresa_id}/...`.
+- [ ] Subir una foto JPG hecha con movil: se procesa con auto-rotacion (verificar con una factura girada).
+- [ ] Job pasa por `SUBIDA -> EN_PROCESO -> PROCESADA_IA`.
+- [ ] Visualizar el documento: el navegador recibe URL firmada de S3 valida durante 5 min.
+- [ ] Reiniciar `app-01`: tras `systemctl restart`, todo accesible y los originales siguen disponibles.
+- [ ] `pg_dump` del dia aparece en `s3://difactura-prod-backups/...` cifrado.
+- [ ] Restaurar el `pg_dump` en una BD de pruebas y comprobar que abre.
+- [ ] Reprocesar una factura ya validada: descarga del original desde S3 y vuelve a llamar a OpenAI sin error.
+
+---
+
+## 11. Que NO se hace y por que
+
+- **No se guardan imagenes derivadas (PNG 300 DPI) en disco.** Son reconstruibles desde el original con coste despreciable; guardarlas multiplica espacio y backups.
+- **No se mete el binario en PostgreSQL como `bytea`.** Infla la BD, ralentiza dumps, complica replicacion.
+- **No se monta Storage Box por SSHFS/SMB para servir originales en caliente.** Es fragil y lento; vale solo como destino de backup secundario si se quisiera redundancia geografica.
+- **No se usan multiples nodos de app desde el dia 1.** Sin trafico que lo justifique, complica el despliegue. La arquitectura ya es multi-nodo-ready (estado en S3 + BD), pasar a 2 nodos cuando haga falta es trivial.
+- **No se despliega `FAKEai-service-v2`.**
 
 ---
 
 ## 12. Mi recomendacion final
 
-Si lo que quieres es sacar Difactura a produccion sin disparar coste ni complejidad, yo haria esto:
+Para sacar Difactura a produccion ya, sin sobrecoste y operable por una sola persona:
 
-1. Hetzner si.
-2. Dos nodos minimo (`app-01` y `db-01`) en red privada.
-3. Docker Compose separado por roles: app y BD.
-4. `FAKEai-service-v2` totalmente fuera del despliegue.
-5. Fase 1 con storage local en volume Hetzner + backups cifrados a Storage Box. **Solo se persisten los originales**, las imagenes intermedias del motor IA siguen siendo en memoria.
-6. Refactor minimo de `getDocumentFile` para resolver por `STORAGE_PATH + storage_key`, y eliminar el directorio muerto `storage/processed/`.
-7. Fase 2 con object storage S3-compatible y worker separado cuando aparezcan los disparadores de la seccion 10.3.
+1. **Hetzner si**, dos nodos (`app-01` + `db-01`) en red privada.
+2. **Sin Docker en `app-01`**: systemd + Caddy + Node + Python en bare metal.
+3. **Sin nginx**: Caddy con TLS automatico.
+4. **Hetzner Object Storage (S3) desde el dia 1** para los originales; bucket separado para backups de Postgres. Volume y Storage Box quedan fuera del plan.
+5. **A la IA, calidad maxima util ya implementada (300 DPI, EXIF, enhancements). Nada que tocar**. Lo que se guarda es solo el original; las imagenes intermedias siguen viviendo en RAM.
+6. **Refactor minimo en backend**: adaptador `S3Storage`, upload por buffer, descarga por URL firmada, eliminar `storage/processed/` y `ruta_storage` absoluta.
+7. **Backups**: `pg_dump` cifrado nocturno a S3. Object storage no necesita backup explicito.
+8. **Endurecer**: CORS cerrado, rate limiting, firewall cloud, headers de seguridad.
 
-Lo que no haria es subir el `docker-compose.yml` actual a un VPS y abrir puertos. Eso hoy se parece mas a un entorno de desarrollo asistido que a una produccion defendible.
+Este plan elimina todos los bloqueantes del plan anterior (`nginx/Dockerfile` vacio, `nginx.conf` vacio, certbot, gestion de volumes, scripts de rsync/restic, dos compose files separados, migracion futura a S3) **sin perder ninguna capacidad real**.
 
 ---
 
-## 13. Siguiente paso recomendado
+## Anexo A — Si prefieres mantener Docker en `app-01`
 
-El siguiente entregable util, si quieres que avancemos, seria preparar estos archivos reales para dejar la produccion casi lista:
+Si por preferencia personal o porque tu equipo lo conoce mejor quieres seguir con Docker en el nodo de aplicacion, el plan se mantiene **sustituyendo solo systemd por un `docker-compose.app.yml` con Caddy + frontend + backend + ai-service-vision**. El resto (Object Storage, sin nginx, sin Volume, backups a S3, refactor del adaptador de storage) se aplica igual.
 
-- `docker-compose.app.yml` (nginx + frontend + backend + ai-service-vision, sin bind mounts, con volume `/data/difactura/storage`)
-- `docker-compose.db.yml` (postgres + tarea de backup)
-- `backend/Dockerfile.prod` (multi-stage, sin `nodemon`, `NODE_ENV=production`, usuario no root)
-- `frontend/Dockerfile.prod` (build de Vite servido como estatico por nginx)
-- `nginx/Dockerfile` y `nginx/nginx.conf` (TLS, proxy `/api`, gzip, headers de seguridad)
-- `.env.production.example` (sin secretos reales)
-- `scripts/backup-postgres.sh` y `scripts/backup-storage.sh` (con destino Hetzner Storage Box y rotacion)
-- Refactor en `backend/src/controllers/invoiceController.js` y `backend/src/server.js` para resolver documentos por `STORAGE_PATH + storage_key` y eliminar `processedDir`.
+Caddy se sigue prefiriendo a nginx por las mismas razones (TLS automatico, configuracion minima).
 
-Con eso ya pasariamos de auditoria y diseno a despliegue ejecutable.
+`db-01` puede quedarse en Postgres nativo (recomendado) o en un contenedor con volume dedicado; cualquiera de las dos vale.
+
+## Anexo B — Si en el futuro quieres servicios gestionados
+
+Cuando el coste de operacion supere lo que cuesta delegarla, los pasos naturales son:
+
+- BD: pasar a Neon, Supabase, o PostgreSQL gestionado (DigitalOcean / OVH / Scaleway).
+- Object Storage: ya estas en S3, portar a R2/B2/AWS S3 cambiando endpoint y keys.
+- Despliegue: Fly.io, Render o Railway si quieres olvidarte del VPS.
+
+Nada de la decision actual te ata: el codigo habla S3 estandar y SQL estandar.
